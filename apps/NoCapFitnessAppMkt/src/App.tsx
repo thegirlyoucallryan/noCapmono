@@ -42,8 +42,8 @@ function App() {
         }}
       >
         <h1 style={{ color: "white", fontSize: "4rem" }}>Keep your workout</h1>
-        <h1 style={{ color: "#98F2E7", fontSize: "7rem" }}>Revolutionary</h1>
-        <p style={{ color: "whitesmoke", fontSize: "1rem", margin: 8 }}>
+        <h1 style={{ color: "#98F2E7", fontSize: "8rem" }}>Revolutionary</h1>
+        <p style={{ color: "whitesmoke", fontSize: "1.8rem", margin: 8 }}>
           Your fitness goals, your way -- Tailor your fitness routine with ease,
           selecting from a vast array of 1300+ exercises
         </p>
@@ -71,13 +71,13 @@ function App() {
                 borderRadius: 40,
                 border: "none",
                 color: "#191919",
-                fontSize: "1rem",
+                fontSize: "1.3rem",
                 backgroundColor: "whitesmoke",
               }}
             >
               Download
             </button>
-            <p style={{ color: "white", margin: 15 }}>
+            <p style={{ color: "white", margin: 15, fontSize: "1.3rem" }}>
               Available on iOS and Android
             </p>
           </div>
