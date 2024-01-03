@@ -1,0 +1,38 @@
+{
+  "expo": {
+    "name": "No-Cap",
+    "slug": "no-cap-fitness-app",
+    "version": "1.0.6",
+    "orientation": "portrait",
+    "icon": "./assets/noCapIcon.png",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "cover"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "bundleIdentifier": "com.no.cap.fitness.app",
+      "supportsTablet": true,
+      "buildNumber": "1.0.6",
+      "usesAppleSignIn": true
+    },
+    "android": {
+      "package": "com.no.cap.fitness.app",
+      "versionCode": 6,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptiveIcon.png"
+      }
+    },
+    "plugins": ["@react-native-google-signin/google-signin", "expo-apple-authentication", ["./android-manifest.plugin", "custom"]],
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "cbca7c36-f296-4094-a6ca-9ca7b8a16431"
+      }
+    }
+  }
+}
