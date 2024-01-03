@@ -1,5 +1,5 @@
 {
-  "name": "No-cap-monorepo",
+  "name": "no-cap-monorepo",
   "private": true,
   "scripts": {
     "build": "turbo build",
