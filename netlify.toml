@@ -1,0 +1,11 @@
+# Netlify builds from the monorepo root.
+# Site = marketing app only.
+
+[build]
+  command = "npm install && npm run build -w nocapfitnessappmkt"
+  publish = "apps/NoCapFitnessAppMkt/dist"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

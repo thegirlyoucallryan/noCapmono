@@ -1,8 +1,8 @@
-# If Netlify’s “Base directory” is already set to apps/NoCapFitnessAppMkt
-# in the dashboard, leave this file as-is (no base override).
+# Use this only if Netlify "Base directory" is set to apps/NoCapFitnessAppMkt.
+# Prefer the root netlify.toml (leave Base directory empty) for this monorepo.
 
 [build]
-  command = "npm run build"
+  command = "cd ../.. && npm install && npm run build -w nocapfitnessappmkt"
   publish = "dist"
 
 [[redirects]]
