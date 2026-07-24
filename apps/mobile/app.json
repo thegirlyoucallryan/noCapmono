@@ -8,7 +8,8 @@
     "icon": "./assets/noCapIcon.png",
     "splash": {
       "image": "./assets/splash.png",
-      "resizeMode": "cover"
+      "resizeMode": "cover",
+      "backgroundColor": "#141418"
     },
     "assetBundlePatterns": [
       "**/*"

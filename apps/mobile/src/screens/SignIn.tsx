@@ -37,7 +37,7 @@ export function SignIn() {
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.logoWell}>
-          <Image source={logo} style={styles.logo} />
+          <Image source={logo} style={styles.logo} resizeMode="cover" />
         </View>
         <Text style={styles.brand}>No-Cap</Text>
         <Text style={styles.tagline}>
@@ -137,8 +137,8 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   logo: {
-    width: 100,
-    height: 100,
+    width: "100%",
+    height: "100%",
   },
   brand: {
     fontFamily: DISPLAY_FONT,

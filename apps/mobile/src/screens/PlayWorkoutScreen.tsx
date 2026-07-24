@@ -107,7 +107,7 @@ const PlayWorkoutScreen = ({ route }: any) => {
   }, [pendingPlayStart, favorites.length, dispatch]);
 
   useEffect(() => {
-    let interval: NodeJS.Timeout | null = null;
+    let interval: ReturnType<typeof setInterval> | null = null;
     if (phase === "playing" && isActive && timer > 0) {
       interval = setInterval(() => {
         setTimer((prev) => prev - 1);

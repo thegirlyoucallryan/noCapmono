@@ -96,8 +96,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   logo: {
-    width: 68,
-    height: 68,
+    width: "100%",
+    height: "100%",
   },
   titleBlock: {
     flex: 1,

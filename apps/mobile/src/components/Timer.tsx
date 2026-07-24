@@ -67,7 +67,7 @@ const Timer = ({ time, iconSize, initiateOnStart }: { time: number; iconSize?: n
   };
 
   useEffect(() => {
-    let interval: string | number | NodeJS.Timeout | null | undefined = null;
+    let interval: ReturnType<typeof setInterval> | null = null;
 
     if(initiateOnStart){
       interval = setInterval(() => {
