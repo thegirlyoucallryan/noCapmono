@@ -1,5 +1,2 @@
 # SPA fallback so /terms, /privacy, /contact work on refresh
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
+/*    /index.html   200
