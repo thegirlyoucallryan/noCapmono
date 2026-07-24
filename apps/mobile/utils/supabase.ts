@@ -1,11 +1,30 @@
 import "react-native-url-polyfill/auto";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createClient } from "@supabase/supabase-js";
-//@ts-ignore
-import SUPABASE_KEY from "@env";
+import Constants from "expo-constants";
 
-const supabaseUrl = "https://uiinntazdlibjeacickb.supabase.co";
-const supabaseAnonKey = process.env.SUPABASE_KEY!;
+const extra = (Constants.expoConfig?.extra ?? {}) as {
+  supabaseUrl?: string;
+  supabaseKey?: string;
+};
+
+const supabaseUrl =
+  process.env.EXPO_PUBLIC_SUPABASE_URL || extra.supabaseUrl || "";
+const supabaseAnonKey =
+  process.env.EXPO_PUBLIC_SUPABASE_KEY || extra.supabaseKey || "";
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.warn(
+    "Missing Supabase env. Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_KEY in .env, then restart Metro with: npm start -- --clear"
+  );
+} else {
+  console.log(
+    "[supabase] url ok:",
+    supabaseUrl.slice(0, 32) + "…",
+    "key prefix:",
+    supabaseAnonKey.slice(0, 12)
+  );
+}
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {

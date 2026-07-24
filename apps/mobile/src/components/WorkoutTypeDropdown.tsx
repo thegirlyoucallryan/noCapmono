@@ -1,10 +1,11 @@
-import React, { useState } from "react";
+import React from "react";
 import { View, Text, StyleSheet } from "react-native";
 import SelectDropdown from "react-native-select-dropdown";
 import { WorkoutType } from "../types/types";
 import Colors from "../constants/Colors";
 import { Ionicons } from "@expo/vector-icons";
-import NeomorphicStyles from "../constants/NeomorphicStyles";
+
+const WORKOUT_TYPES: WorkoutType[] = ["Circuit", "Straight Set"];
 
 const WorkoutTypeDropdown = ({
   type,
@@ -13,73 +14,65 @@ const WorkoutTypeDropdown = ({
   type: string;
   setType: (value: WorkoutType) => void;
 }) => {
-  const handleChange = (value: WorkoutType) => {
-    setType(value);
-  };
-  const types = ["Circuit", "Straight Set"];
-
   return (
-  
-     
-      <SelectDropdown
-        data={types}
-        defaultButtonText={type}
-        dropdownOverlayColor={"rgba(80,80,80, .6)"}
-        onSelect={(selectedItem, index) => {
-          handleChange(selectedItem);
-        }}
-        rowStyle={{ ...styles.rowText }}
-        rowTextStyle={styles.rowText}
-        renderCustomizedRowChild={(value) => (
-          <View
-            style={{
-              flexDirection: "row",
-              justifyContent: "space-between",
-              paddingHorizontal: 5,
-            }}
-          >
-            <Text style={styles.rowText}>{value}</Text>
-            <Ionicons name="star-outline" size={12} color={Colors.accent3} />
-          </View>
-        )}
-        buttonStyle={{ ...styles.dropdown, ...styles.dropdownBTN,...NeomorphicStyles}}
-        buttonTextStyle={styles.dropdown}
-        renderDropdownIcon={() => (
+    <SelectDropdown
+      data={WORKOUT_TYPES}
+      defaultButtonText={type}
+      onSelect={(selected: WorkoutType) => setType(selected)}
+      dropdownOverlayColor="rgba(0,0,0,0.6)"
+      buttonStyle={styles.dropdownBtn}
+      buttonTextStyle={styles.dropdownText}
+      rowStyle={styles.row}
+      rowTextStyle={styles.rowText}
+      renderCustomizedRowChild={(value: WorkoutType) => (
+        <View style={styles.rowInner}>
           <Ionicons
-            name="arrow-down-circle-outline"
-            size={23}
+            name={value === "Circuit" ? "repeat" : "list"}
+            size={16}
             color={Colors.accent}
-            style={{ position: "absolute", top: 5, right: 4 }}
           />
-        )}
-      />
-
+          <Text style={styles.rowText}>{value}</Text>
+        </View>
+      )}
+      renderDropdownIcon={() => (
+        <Ionicons name="chevron-down" size={16} color={Colors.textMuted} />
+      )}
+    />
   );
 };
 
 export default WorkoutTypeDropdown;
 
 const styles = StyleSheet.create({
-  rowText: {
-    backgroundColor: Colors.twentyThree,
-    color: Colors.accent,
-    fontFamily: "Sonsie",
-    fontSize: 14,
-    borderBottomColor: "transparent",
+  dropdownBtn: {
+    backgroundColor: Colors.inset,
+    borderRadius: 10,
+    height: 36,
+    width: 130,
+    borderTopColor: Colors.shadowDark,
+    borderLeftColor: Colors.shadowDark,
+    borderBottomColor: Colors.highlight,
+    borderRightColor: Colors.highlight,
+    borderWidth: 1,
   },
-
-  dropdown: {
+  dropdownText: {
     color: Colors.accent,
-    fontFamily: "Sonsie",
-    backgroundColor: "transparent",
-       height: 40,
     fontSize: 13,
+    fontWeight: "600",
   },
-  dropdownBTN: {
-   
-    // borderRadius: 4,
-    paddingTop: 14,
-    marginTop: 2
-   
+  row: {
+    backgroundColor: Colors.surface,
+    borderBottomColor: Colors.shadowDark,
+  },
+  rowInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  rowText: {
+    color: "#fff",
+    fontSize: 14,
   },
 });

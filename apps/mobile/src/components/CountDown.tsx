@@ -1,134 +1,136 @@
-import { Text, View, StyleSheet, Pressable } from 'react-native'
-import Colors from '../constants/Colors'
-import { Ionicons } from '@expo/vector-icons'
-import React, { useState, useEffect } from 'react'
-import NeomorphicStyles from '../constants/NeomorphicStyles'
-import NMPHInset from '../constants/NMPHInset'
-import CircularProgress from 'react-native-circular-progress-indicator'
-import NeomorphicButton from './NeomorphicButton'
+import { Text, View, StyleSheet, Pressable } from "react-native";
+import Colors from "../constants/Colors";
+import Theme from "../constants/Theme";
+import React, { useState, useEffect } from "react";
+import { Ionicons } from "@expo/vector-icons";
 
 const CountDown = ({
   time,
   onZero,
-  setTimer,
 }: {
-  time: number
-  onZero: () => void
-  setTimer?: React.Dispatch<React.SetStateAction<number>>
+  time: number;
+  onZero: () => void;
+  setTimer?: React.Dispatch<React.SetStateAction<number>>;
 }) => {
-  const [seconds, setSeconds] = useState<number>(time)
-  const [isActive, setIsActive] = useState<boolean>(true)
+  const [seconds, setSeconds] = useState<number>(time);
+  const [isActive, setIsActive] = useState<boolean>(true);
 
-  const toggle = async () => {
-    setIsActive(!isActive)
-  }
+  const toggle = () => setIsActive(!isActive);
+
   const handleReset = () => {
-    setSeconds(time)
-    setIsActive(false)
-  }
+    setIsActive(false);
+    setSeconds(time);
+  };
+
+  const handleSkip = () => {
+    setIsActive(false);
+    setSeconds(0);
+    onZero();
+  };
 
   useEffect(() => {
-    let interval: NodeJS.Timeout | null = null
+    let interval: NodeJS.Timeout | null = null;
 
     if (isActive && seconds > 0) {
       interval = setInterval(() => {
-        setSeconds((prevSeconds) => prevSeconds - 1)
-      }, 1000)
-    } else if (seconds === 0 && !isActive) {
-      setTimer && setTimer(time)
+        setSeconds((prev) => prev - 1);
+      }, 1000);
     } else if (seconds === 0 && isActive) {
-      onZero()
+      onZero();
     }
 
     return () => {
-      if (interval) {
-        setTimer && setTimer(0)
-        clearInterval(interval)
-      }
-    }
-  }, [seconds, isActive, onZero])
+      if (interval) clearInterval(interval);
+    };
+  }, [seconds, isActive, onZero]);
+
+  const label = String(seconds).padStart(2, "0");
 
   return (
-    <View>
-      <View>
-        <View
-          style={{
-            ...NeomorphicStyles,
-            ...NMPHInset,
-            alignSelf: 'center',
-            padding: 14,
-            borderRadius: 400,
-            shadowColor: Colors.accent,
-          }}
-        >
-          <CircularProgress
-            value={seconds}
-            maxValue={time}
-            radius={100}
-            activeStrokeColor={Colors.accent}
-            inActiveStrokeColor={Colors.backGround}
-            inActiveStrokeOpacity={0.6}
-            inActiveStrokeWidth={30}
-            activeStrokeWidth={30}
-            title={''}
-            titleColor={Colors.primary}
-            titleStyle={{ fontWeight: 'bold' }}
-            dashedStrokeConfig={{
-              count: time,
-              width: 4,
-            }}
-          />
+    <View style={styles.wrap}>
+      <View style={styles.timerBox}>
+        <View style={styles.buttonContainer}>
+          <Pressable onPress={toggle}>
+            <Text style={styles.startBtn}>
+              {isActive ? (
+                <Ionicons size={45} name="pause" />
+              ) : (
+                <Ionicons size={45} name="play" />
+              )}
+            </Text>
+          </Pressable>
         </View>
-        <View
-          style={{ padding: 20, alignItems: 'center', alignSelf: 'center' }}
-        >
-          <NeomorphicButton
-            onPress={toggle}
-            icon={isActive ? 'pause' : 'play'}
-            title={isActive ? 'pause' : 'play'}
-            extraTextStyles={{ color: Colors.primary }}
-            extraButtonStyles={{ padding: 5 }}
-          />
+        <View>
+          <Text style={styles.counter}>00:{label}</Text>
+          <View style={styles.actions}>
+            <Pressable onPress={handleReset}>
+              <Text style={styles.pauseBtn}>Reset</Text>
+            </Pressable>
+            <Text style={styles.dot}>·</Text>
+            <Pressable onPress={handleSkip}>
+              <Text style={styles.skipBtn}>Skip</Text>
+            </Pressable>
+          </View>
         </View>
-        <Pressable onPress={handleReset}>
-          <Text style={styles.pauseBtn}> Reset </Text>
-        </Pressable>
       </View>
     </View>
-  )
-}
+  );
+};
 
 const styles = StyleSheet.create({
+  wrap: {
+    alignItems: "center",
+  },
   timerBox: {
-    alignItems: 'center',
-    alignContent: 'center',
-
+    ...Theme.inset,
+    paddingHorizontal: 18,
+    padding: 12,
+    alignItems: "center",
+    borderRadius: Theme.radius.lg,
     margin: 10,
-    justifyContent: 'center',
-
-    flexDirection: 'row',
+    justifyContent: "center",
+    flexDirection: "row",
+    ...Theme.glow.cyan,
   },
-
   counter: {
-    color: Colors.accent,
-    fontSize: 60,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    alignContent: 'center',
+    color: Colors.glowCyan,
+    fontSize: 48,
+    fontWeight: "bold",
+    textAlign: "center",
+    marginLeft: 20,
   },
-
+  buttonContainer: {
+    alignContent: "center",
+  },
   startBtn: {
-    color: Colors.primary,
-    alignSelf: 'center',
-    paddingTop: 20,
+    color: Colors.glowCyan,
+    borderColor: Colors.glowCyan,
+    borderWidth: 2,
+    borderRadius: 200,
+    padding: 10,
+    paddingRight: 4,
+    alignSelf: "center",
+  },
+  actions: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginTop: 2,
   },
   pauseBtn: {
-    fontSize: 20,
-    color: 'black',
-    alignSelf: 'center',
-    fontWeight: 'bold',
-    letterSpacing: 0.5,
+    fontSize: 18,
+    color: Colors.glowCyan,
   },
-})
+  skipBtn: {
+    fontSize: 18,
+    color: Colors.ctaStart,
+    fontWeight: "700",
+  },
+  dot: {
+    color: Colors.textMuted,
+    fontSize: 18,
+  },
+});
 
-export default CountDown
+export default CountDown;

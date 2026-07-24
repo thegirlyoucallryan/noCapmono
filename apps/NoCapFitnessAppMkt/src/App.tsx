@@ -1,7 +1,10 @@
 import img from "./assets/heroImg1.jpg";
 import logo from "./assets/icon.png";
+import { TermsPage } from "./TermsPage";
+import { PrivacyPage } from "./PrivacyPage";
+import { ContactPage } from "./ContactPage";
 
-function App() {
+function HomePage() {
   return (
     <div
       style={{
@@ -23,7 +26,6 @@ function App() {
           position: "relative",
         }}
       >
-        {/*overlay*/}
         <div
           style={{
             width: "100%",
@@ -84,41 +86,43 @@ function App() {
         </div>
       </div>
 
-      {/* Footer */}
-      <div
+      <footer
         style={{
           background: "black",
           color: "white",
           display: "flex",
           justifyContent: "space-around",
           padding: "20px",
+          flexWrap: "wrap",
+          gap: 16,
         }}
       >
-        <p>Terms & Conditions</p>
-        <p>Privacy Policy</p>
-        <a>Contact Us</a>
-      </div>
+        <a href="/terms" style={{ color: "#98F2E7", textDecoration: "none" }}>
+          Terms & Conditions
+        </a>
+        <a href="/privacy" style={{ color: "#98F2E7", textDecoration: "none" }}>
+          Privacy Policy
+        </a>
+        <a href="/contact" style={{ color: "#98F2E7", textDecoration: "none" }}>
+          Contact Us
+        </a>
+      </footer>
     </div>
   );
 }
 
-export default App;
-
-{
-  /* <div
-style={{
-  marginLeft: "40%",
-  display: "flex",
-  justifyContent: "center",
-  flexDirection: "column",
-}}
->
-<h1 style={{ color: "white", textAlign: "center", fontSize: 65 }}>
-  Keep your workout revolutionary
-</h1>
-<img
-  src={logo}
-  style={{ height: 200, width: 200, alignSelf: "center" }}
-/>
-</div> */
+function App() {
+  const path = window.location.pathname.replace(/\/+$/, "") || "/";
+  if (path === "/terms") {
+    return <TermsPage />;
+  }
+  if (path === "/privacy") {
+    return <PrivacyPage />;
+  }
+  if (path === "/contact") {
+    return <ContactPage />;
+  }
+  return <HomePage />;
 }
+
+export default App;

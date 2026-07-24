@@ -1,15 +1,19 @@
-import React, { Children } from "react";
-import LinearGradient from "react-native-linear-gradient";
+import React from "react";
+import { View, StyleSheet } from "react-native";
 import Colors from "../constants/Colors";
-import NMPHInset from "../constants/NMPHInset";
+import Theme from "../constants/Theme";
 
 export function NeomorphicView({ children }: React.PropsWithChildren) {
-  return (
-    <LinearGradient
-      colors={[Colors.twentyThree, Colors.twentyThree]}
-      style={{ alignItems: "center", marginBottom: 12 }}
-    >
-      {children}
-    </LinearGradient>
-  );
+  return <View style={styles.shell}>{children}</View>;
 }
+
+const styles = StyleSheet.create({
+  shell: {
+    ...Theme.raised,
+    borderRadius: Theme.radius.lg,
+    padding: 20,
+    alignItems: "center",
+    backgroundColor: Colors.surface,
+    ...Theme.glow.purple,
+  },
+});

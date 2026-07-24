@@ -1,0 +1,11 @@
+# If Netlify’s “Base directory” is already set to apps/NoCapFitnessAppMkt
+# in the dashboard, leave this file as-is (no base override).
+
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

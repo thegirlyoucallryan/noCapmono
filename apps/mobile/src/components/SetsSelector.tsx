@@ -1,11 +1,11 @@
-import React, { useState } from "react";
-import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import React from "react";
+import { View, Text, StyleSheet } from "react-native";
 import Colors from "../constants/Colors";
-import NeomorphicButton from "./NeomorphicButton";
+import { InsetButton } from "./InsetButton";
+import { Ionicons } from "@expo/vector-icons";
 
 const SetSelector = ({
   onSelect,
-
   currentSet,
 }: {
   onSelect: (sets: number) => void;
@@ -13,44 +13,22 @@ const SetSelector = ({
   currentSet: number;
 }) => {
   const increment = () => {
-    if (currentSet <= 5) {
-      onSelect(currentSet + 1);
-    }
+    if (currentSet < 6) onSelect(currentSet + 1);
   };
 
   const decrement = () => {
-    if (currentSet >= 2) {
-      onSelect(currentSet - 1);
-    }
+    if (currentSet > 1) onSelect(currentSet - 1);
   };
 
   return (
     <View style={styles.container}>
+      <InsetButton size={28} onPress={decrement}>
+        <Ionicons name="remove" size={16} color={Colors.accent} />
+      </InsetButton>
       <Text style={styles.number}>{currentSet}</Text>
-      <Text style={styles.sets}>sets</Text>
-      <View>
-        <NeomorphicButton
-          onPress={increment}
-          title="&#x25B2;"
-          extraButtonStyles={{
-            marginHorizontal: 2,
-            borderRadius: 2,
-            shadowColor: "white",
-          }}
-          extraTextStyles={{ color: "white", fontSize: 18 }}
-        />
-        <NeomorphicButton
-          onPress={decrement}
-          title="&#x25BC;"
-          extraButtonStyles={{
-            marginHorizontal: 2,
-            borderRadius: 2,
-            marginTop: 3,
-            shadowColor: "white",
-          }}
-          extraTextStyles={{ color: "white", fontSize: 18 }}
-        />
-      </View>
+      <InsetButton size={28} onPress={increment}>
+        <Ionicons name="add" size={16} color={Colors.accent} />
+      </InsetButton>
     </View>
   );
 };
@@ -59,30 +37,14 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-around",
-    borderRadius: 5,
-    marginVertical: 5,
-  },
-  button: {
-    paddingHorizontal: 2,
-    justifyContent: "center",
-    alignItems: "center",
-
-    marginHorizontal: 4,
-  },
-  buttonText: {
-    color: "white",
-    fontSize: 18,
-    textAlign: "center",
+    gap: 8,
   },
   number: {
-    fontSize: 20,
+    fontSize: 22,
     color: Colors.accent,
-    marginHorizontal: 3,
-  },
-  sets: {
-    color: Colors.accent,
-    fontSize: 18,
+    fontWeight: "700",
+    minWidth: 24,
+    textAlign: "center",
   },
 });
 

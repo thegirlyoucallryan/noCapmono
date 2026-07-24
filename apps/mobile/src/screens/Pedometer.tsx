@@ -1,61 +1,90 @@
-import { useState, useEffect } from 'react'
-import {
-  PermissionsAndroid,
-  StyleSheet,
-  Platform,
-  View,
-  Text,
-} from 'react-native'
-import { Pedometer } from 'expo-sensors'
-import Colors from '../constants/Colors'
-import { requestPermissionsAsync } from 'expo-sensors/build/Pedometer'
-import CircularProgress from 'react-native-circular-progress-indicator'
-import NeomorphicStyles from '../constants/NeomorphicStyles'
-import NMPHInset from '../constants/NMPHInset'
+import { useState, useEffect } from "react";
+import { PermissionsAndroid, StyleSheet, Platform, View } from "react-native";
+import { Pedometer } from "expo-sensors";
+import Colors from "../constants/Colors";
+import CircularProgress from "react-native-circular-progress-indicator";
+import NeomorphicStyles from "../constants/NeomorphicStyles";
+import NMPHInset from "../constants/NMPHInset";
 
 export function PedometerScreen() {
-  const [isPedometerAvailable, setIsPedometerAvailable] = useState('checking')
-  // const [permissionsGranted, setPermissionsGranted] = useState<boolean>(false)
-  const [currentStepCount, setCurrentStepCount] = useState(0)
+  const [isPedometerAvailable, setIsPedometerAvailable] = useState("checking");
+  const [permissionsGranted, setPermissionsGranted] = useState<boolean>(false);
+  const [currentStepCount, setCurrentStepCount] = useState(0);
 
-  const dist = (currentStepCount * 2.2) / 5280
-  const distance = dist.toFixed(2)
+  const checkAndRequestPedometerPermission = async () => {
+    if (Platform.OS === "android") {
+      const isAvailable = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.ACTIVITY_RECOGNITION,
+        {
+          title: "Pedometer App Permission",
+          message: "This permissions is required for the pedometer function.",
+          buttonNeutral: "Ask Me Later",
+          buttonNegative: "Cancel",
+          buttonPositive: "OK",
+        }
+      );
 
-  const cal = dist * 60
-  const caloriesBurnt = cal.toFixed(2)
+      if (!isAvailable) {
+        await Pedometer.requestPermissionsAsync();
+      }
 
-  // useEffect(() => {
-  //   checkAndRequestPedometerPermission()
-  //   console.log('permissions', currentStepCount, permissionsGranted)
-  // }, [])
+      if (isAvailable === PermissionsAndroid.RESULTS.GRANTED) {
+        setPermissionsGranted(true);
+      } else {
+        alert("Permission denied");
+        return;
+      }
+    }
+    if (Platform.OS === "ios") {
+      const { status } = await Pedometer.getPermissionsAsync();
+
+      if (status === "granted") {
+        setPermissionsGranted(true);
+      } else {
+        const newStatus = await Pedometer.requestPermissionsAsync();
+        setPermissionsGranted(newStatus.status === "granted");
+      }
+    }
+  };
+
+  checkAndRequestPedometerPermission();
 
   useEffect(() => {
-    subscribe()
-  }, [])
+    if (permissionsGranted && isPedometerAvailable) {
+      subscribe();
+    }
+  }, []);
 
   const subscribe = () => {
     Pedometer.watchStepCount((result) => {
-      setCurrentStepCount(result.steps)
-    })
+      setCurrentStepCount(result.steps);
+    });
 
     Pedometer.isAvailableAsync().then(
       (result) => {
-        setIsPedometerAvailable(String(result))
+        setIsPedometerAvailable(String(result));
       },
 
       (error) => {
-        setIsPedometerAvailable(error)
+        setIsPedometerAvailable(error);
       }
-    )
-  }
+    );
+  };
 
   return (
-    <View>
+    <View
+      style={{
+        borderRadius: 550,
+        padding: 26,
+        alignContent: "center",
+        justifyContent: "center",
+      }}
+    >
       <View
         style={{
           ...NeomorphicStyles,
           ...NMPHInset,
-          alignSelf: 'center',
+          alignSelf: "center",
           padding: 14,
           borderRadius: 400,
           shadowColor: Colors.accent,
@@ -63,7 +92,6 @@ export function PedometerScreen() {
       >
         <CircularProgress
           value={currentStepCount}
-          clockwise
           maxValue={11500}
           radius={140}
           activeStrokeColor={Colors.accent}
@@ -71,45 +99,22 @@ export function PedometerScreen() {
           inActiveStrokeOpacity={0.4}
           inActiveStrokeWidth={30}
           activeStrokeWidth={30}
-          title={'Step Count'}
+          title={"Step Count"}
           titleColor={Colors.primary}
-          titleStyle={{ fontWeight: 'bold' }}
+          titleStyle={{ fontWeight: "bold" }}
           dashedStrokeConfig={{
-            count: 100,
+            count: 50,
             width: 4,
           }}
         />
       </View>
-      <View
-        style={{
-          flexDirection: 'row',
-          justifyContent: 'space-between',
-          padding: 15,
-          marginHorizontal: 35,
-        }}
-      >
-        <View>
-          <Text style={styles.stats}>{`${distance}`}</Text>
-          <Text style={styles.unit}>{`Mi`}</Text>
-        </View>
-        <View>
-          <Text style={styles.stats}>{`${caloriesBurnt}`}</Text>
-          <Text style={styles.unit}>{` Cal`}</Text>
-        </View>
-      </View>
     </View>
-  )
+  );
 }
 
 const styles = StyleSheet.create({
-  stats: {
-    fontSize: 30,
-    color: Colors.accent,
-    textAlign: 'center',
+  container: {
+    flex: 1,
+    backgroundColor: Colors.twentyThree,
   },
-  unit: {
-    fontSize: 20,
-    color: Colors.inner,
-    textAlign: 'center',
-  },
-})
+});

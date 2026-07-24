@@ -1,64 +1,144 @@
-import { createStackNavigator } from '@react-navigation/stack'
-import { createNavigatorFactory, useNavigation } from '@react-navigation/native'
-import HomeScreen from '../screens/HomeScreen'
-import WorkoutDetail from '../screens/WorkoutDetailScreen'
-import FavoritesScreen from '../screens/FavoritesScreen'
-import WorkoutList from '../screens/WorkoutListScreen'
-import Colors from '../constants/Colors'
-import { Ionicons } from '@expo/vector-icons'
-import WorkoutListDetailScreen from '../screens/WorkoutListDetailScreen'
-import PlayWorkoutScreen from '../screens/PlayWorkoutScreen'
-import { connect } from 'react-redux'
-import { View, Text, StyleSheet, Pressable } from 'react-native'
-import { createMaterialBottomTabNavigator } from '@react-navigation/material-bottom-tabs'
-import { SignIn } from '../screens/SignIn'
-import { supabase } from '../../utils/supabase'
-import { useEffect, useState } from 'react'
-import { Session } from '@supabase/supabase-js'
-import NeomorphicButton from '../components/NeomorphicButton'
-import { PedometerScreen } from '../screens/Pedometer'
-import { CalculatorScreen } from '../screens/CalculatorScreen'
-import { shadow } from 'react-native-paper'
+import { createStackNavigator } from "@react-navigation/stack";
+import { createNavigatorFactory } from "@react-navigation/native";
+import HomeScreen from "../screens/HomeScreen";
+import DashboardScreen from "../screens/DashboardScreen";
+import WorkoutDetail from "../screens/WorkoutDetailScreen";
+import FavoritesScreen from "../screens/FavoritesScreen";
+import WorkoutList from "../screens/WorkoutListScreen";
+import Colors from "../constants/Colors";
+import { Ionicons } from "@expo/vector-icons";
+import WorkoutListDetailScreen from "../screens/WorkoutListDetailScreen";
+import PlayWorkoutScreen from "../screens/PlayWorkoutScreen";
+import { connect } from "react-redux";
+import { View, Text, StyleSheet } from "react-native";
+import { createMaterialBottomTabNavigator } from "@react-navigation/material-bottom-tabs";
+import { FinaleScreen } from "../screens/FinaleScreen";
+import { SignIn } from "../screens/SignIn";
+import { AcceptLegalScreen } from "../screens/AcceptLegalScreen";
+import { TermsAndConditionsScreen } from "../screens/TermsAndConditionsScreen";
+import { PrivacyPolicyScreen } from "../screens/PrivacyPolicyScreen";
+import { supabase } from "../../utils/supabase";
+import { useEffect, useState } from "react";
+import { Session } from "@supabase/supabase-js";
+import { CalculatorScreen } from "../screens/CalculatorScreen";
+import { WorkoutMiniBar } from "../components/WorkoutMiniBar";
+import { hasAcceptedLegal, ensureLegalAfterSignIn } from "../../utils/workoutApi";
+import { ActivityIndicator } from "react-native";
+import { useDispatch } from "react-redux";
+import { clearFavorites } from "../store/actions";
+import { clearLegacySharedLocalData } from "../../utils/workoutStore";
 
-//react native paper theme in constants to set background color of secondary container for tabs
 export type RootStackParamList = {
-  Home: undefined
-  Display: { id: string; name: string }
-  Play: any
-  Details: { id?: string; name?: string }
-  Finale: any
-  Welcome: undefined
-  Auth: undefined
-  Tabs: undefined
+  Home: undefined;
+  BuildHome: undefined;
+  MyWorkoutHome: undefined;
+  Display: { id: string; name: string };
+  Play: any;
+  Details: { id?: string; name?: string };
+  Finale: any;
+  Welcome: undefined;
+  Auth: undefined;
+  Tabs: undefined;
   Workouts:
     | { equipment: any; bodyPart?: undefined }
-    | { bodyPart: any; equipment?: undefined }
-    | { userInput: string }
-}
+    | { bodyPart: any; equipment?: undefined };
+};
 
 declare global {
   namespace ReactNavigation {
     interface RootParamList extends RootStackParamList {}
   }
 }
-const Stack = createStackNavigator()
+const Stack = createStackNavigator();
 
 export function AppNavigator() {
-  const [session, setSession] = useState<Session | null>(null)
+  const dispatch = useDispatch();
+  const [session, setSession] = useState<Session | null>(null);
+  const [legalOk, setLegalOk] = useState(false);
+  const [booting, setBooting] = useState(true);
+
+  const refreshLegal = async () => {
+    try {
+      await ensureLegalAfterSignIn();
+      const ok = await hasAcceptedLegal();
+      setLegalOk(ok);
+    } catch {
+      setLegalOk(false);
+    }
+  };
+
   useEffect(() => {
-    supabase.auth.onAuthStateChange((event, session) => {
-      setSession(session)
-    })
-  }, [])
+    let mounted = true;
+    let lastUserId: string | null | undefined;
+
+    clearLegacySharedLocalData().catch(() => {});
+
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!mounted) return;
+      lastUserId = session?.user?.id ?? null;
+      setSession(session);
+      if (session?.user) {
+        await refreshLegal();
+      } else {
+        setLegalOk(false);
+      }
+      setBooting(false);
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      const nextId = session?.user?.id ?? null;
+      if (lastUserId !== undefined && lastUserId !== nextId) {
+        dispatch(clearFavorites());
+      }
+      lastUserId = nextId;
+      setSession(session);
+      if (session?.user) {
+        await refreshLegal();
+      } else {
+        setLegalOk(false);
+      }
+    });
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, [dispatch]);
+
+  if (booting) {
+    return (
+      <View
+        style={{
+          flex: 1,
+          backgroundColor: Colors.twentyThree,
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <ActivityIndicator color={Colors.accent} size="large" />
+      </View>
+    );
+  }
+
+  const isAuthenticated = !!session?.user;
 
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
-      {session === null && (
+      {!isAuthenticated && (
         <Stack.Screen name="AuthStack" component={AuthStack} />
       )}
-      {session?.user && <Stack.Screen name="Tabs" component={WorkoutTabs} />}
+      {isAuthenticated && !legalOk && (
+        <Stack.Screen name="AcceptLegalStack">
+          {() => <AcceptLegalStack onAccepted={() => setLegalOk(true)} />}
+        </Stack.Screen>
+      )}
+      {isAuthenticated && legalOk && (
+        <Stack.Screen name="Tabs" component={WorkoutTabs} />
+      )}
     </Stack.Navigator>
-  )
+  );
 }
 
 function AuthStack() {
@@ -69,24 +149,90 @@ function AuthStack() {
         component={SignIn}
         options={{ headerShown: false }}
       />
+      <Stack.Screen
+        name="TermsAndConditions"
+        component={TermsAndConditionsScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="PrivacyPolicy"
+        component={PrivacyPolicyScreen}
+        options={{ headerShown: false }}
+      />
     </Stack.Navigator>
-  )
+  );
+}
+
+function AcceptLegalStack({ onAccepted }: { onAccepted: () => void }) {
+  return (
+    <Stack.Navigator>
+      <Stack.Screen name="AcceptLegalHome" options={{ headerShown: false }}>
+        {() => <AcceptLegalScreen onAccepted={onAccepted} />}
+      </Stack.Screen>
+      <Stack.Screen
+        name="TermsAndConditions"
+        component={TermsAndConditionsScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="PrivacyPolicy"
+        component={PrivacyPolicyScreen}
+        options={{ headerShown: false }}
+      />
+    </Stack.Navigator>
+  );
+}
+
+export function BuildTabShell() {
+  return (
+    <View style={{ flex: 1, backgroundColor: Colors.twentyThree }}>
+      <WorkoutStack />
+      <WorkoutMiniBar />
+    </View>
+  );
+}
+
+/** My Workout tab — list + exercise detail (Details lives here, not only under Build) */
+export function MyWorkoutTabShell() {
+  return (
+    <View style={{ flex: 1, backgroundColor: Colors.twentyThree }}>
+      <Stack.Navigator
+        initialRouteName="MyWorkoutHome"
+        screenOptions={{
+          headerShown: false,
+          headerStyle: {
+            backgroundColor: Colors.twentyThree,
+            shadowOpacity: 0,
+            elevation: 0,
+          },
+          headerTintColor: Colors.accent,
+          headerTitleStyle: {
+            fontWeight: "100",
+          },
+        }}
+      >
+        <Stack.Screen name="MyWorkoutHome" component={FavoritesScreen} />
+        <Stack.Screen
+          name="Details"
+          component={WorkoutDetail}
+          options={{ headerShown: true }}
+        />
+        <Stack.Screen
+          name="Display"
+          component={WorkoutListDetailScreen}
+          options={{ headerShown: true }}
+        />
+      </Stack.Navigator>
+    </View>
+  );
 }
 
 export function WorkoutStack() {
-  const nav = useNavigation()
-  const handleLogout = async () => {
-    try {
-      await supabase.auth.signOut()
-    } catch (error: any) {
-      console.error('Error logging out:', error?.message)
-    }
-  }
-
   return (
     <Stack.Navigator
-      initialRouteName="Home"
-      screenOptions={() => ({
+      initialRouteName="BuildHome"
+      screenOptions={{
+        headerShown: false,
         headerStyle: {
           backgroundColor: Colors.twentyThree,
           shadowOpacity: 0,
@@ -94,141 +240,140 @@ export function WorkoutStack() {
         },
         headerTintColor: Colors.accent,
         headerTitleStyle: {
-          fontWeight: '100',
-          fontSize: 24,
+          fontWeight: "100",
         },
-      })}
+      }}
     >
       <Stack.Screen
-        name="Home"
+        name="BuildHome"
         component={HomeScreen}
-        options={({ navigation }) => ({
-          headerRight: () => (
-            <NeomorphicButton
-              onPress={handleLogout}
-              title={'Log out'}
-              icon={'ios-log-out'}
-              extraTextStyles={{ color: Colors.inner }}
-              extraButtonStyles={{
-                paddingVertical: 1,
-                paddingHorizontal: 2,
-                marginHorizontal: 29,
-                marginVertical: 2,
-              }}
-            />
-          ),
-        })}
+        options={{ title: "Build" }}
       />
 
-      {/* <Stack.Screen name="Auth" component={AuthStack} /> */}
-      <Stack.Screen name="Workouts" component={WorkoutList} />
-      <Stack.Screen name="Display" component={WorkoutListDetailScreen} />
       <Stack.Screen
-        name="Play"
-        component={PlayWorkoutScreen}
-        options={{ gestureEnabled: false }}
+        name="Workouts"
+        component={WorkoutList}
+        options={{ headerShown: true, title: "Exercises" }}
       />
-      <Stack.Screen name="Details" component={WorkoutDetail} />
       <Stack.Screen
-        name="Favorites"
-        component={FavoritesScreen}
-        options={{ headerShown: false }}
+        name="Display"
+        component={WorkoutListDetailScreen}
+        options={{ headerShown: true }}
+      />
+      <Stack.Screen
+        name="Details"
+        component={WorkoutDetail}
+        options={{ headerShown: true }}
+      />
+      <Stack.Screen name="Favorites" component={FavoritesScreen} />
+      <Stack.Screen
+        name="Finale"
+        component={FinaleScreen}
+        options={{ headerShown: true, title: "Done" }}
       />
     </Stack.Navigator>
-  )
+  );
 }
 
 function TabBarIcon({
   value,
   tabInfo,
 }: {
-  value: number
-  tabInfo: { color: string; focused: boolean }
+  value: number;
+  tabInfo: { color: string; focused: boolean };
 }) {
   if (value === 0) {
     return (
       <View style={style.container}>
         <Ionicons name="barbell-outline" size={25} color={tabInfo.color} />
       </View>
-    )
+    );
   }
   return (
     <View style={style.container}>
       <Text style={style.badge}>{value}</Text>
       <Ionicons name="barbell-outline" size={25} color={tabInfo.color} />
     </View>
-  )
+  );
 }
 
-const Tab = createMaterialBottomTabNavigator()
+const Tab = createMaterialBottomTabNavigator();
 
 export function WorkoutTabs() {
   return (
     <Tab.Navigator
-      initialRouteName="Search"
+      initialRouteName="Home"
       activeColor={Colors.accent}
       shifting={false}
       inactiveColor={Colors.primary}
       barStyle={{ backgroundColor: Colors.twentyThree }}
     >
       <Tab.Screen
-        name="Search"
-        key={'Search'}
-        component={WorkoutStack}
+        name="Home"
+        component={DashboardScreen}
+        options={() => ({
+          tabBarIcon: (tabInfo) => (
+            <Ionicons name="home-outline" size={25} color={tabInfo.color} />
+          ),
+        })}
+      />
+      <Tab.Screen
+        name="Build"
+        key={"Build"}
+        component={BuildTabShell}
         options={() => ({
           tabBarColor: Colors.accent,
-
-          tabBarIcon: (tabInfo) => {
-            return <Ionicons name="search" size={25} color={tabInfo.color} />
-          },
+          tabBarIcon: (tabInfo) => (
+            <Ionicons name="hammer-outline" size={25} color={tabInfo.color} />
+          ),
         })}
       />
       <Tab.Screen
-        name="Steps"
+        name="My Workout"
+        component={MyWorkoutTabShell}
+        options={() => ({
+          tabBarIcon: (tabInfo) => (
+            <TabBarIconContainer tabInfo={tabInfo} />
+          ),
+        })}
+      />
+      <Tab.Screen
+        name="Play"
+        component={PlayWorkoutScreen}
+        options={() => ({
+          tabBarIcon: (tabInfo) => (
+            <Ionicons name="play-circle-outline" size={25} color={tabInfo.color} />
+          ),
+        })}
+      />
+      <Tab.Screen
+        name="Tools"
         component={CalculatorScreen}
         options={() => ({
-          tabBarIcon: (tabInfo) => {
-            return (
-              <Ionicons name="calculator" size={25} color={tabInfo.color} />
-            )
-          },
-        })}
-      />
-      <Tab.Screen
-        name="Workout"
-        component={FavoritesScreen}
-        options={() => ({
-          tabBarIcon: (tabInfo) => {
-            return <TabBarIconContainer tabInfo={tabInfo} />
-          },
+          tabBarIcon: (tabInfo) => (
+            <Ionicons name="calculator-outline" size={25} color={tabInfo.color} />
+          ),
         })}
       />
     </Tab.Navigator>
-  )
+  );
 }
 
 const TabBarIconContainer = connect((state) => ({
   value: state.favorites.favoritedExercises.length,
-}))(TabBarIcon)
+}))(TabBarIcon);
 
 const style = StyleSheet.create({
   container: {
-    position: 'relative',
+    position: "relative",
     width: 25,
-    elevation: 6,
-    shadowColor: Colors.accent,
+
     padding: 1,
-    shadowOffset: {
-      width: 4,
-      height: 4,
-    },
-    shadowOpacity: 0.8,
-    shadowRadius: 5,
   },
   badge: {
     fontSize: 14,
-    fontWeight: 'bold',
-    position: 'absolute',
+    fontWeight: "bold",
+    position: "absolute",
     top: 0,
     backgroundColor: Colors.search,
     borderRadius: 12,
@@ -236,6 +381,6 @@ const style = StyleSheet.create({
     right: -15,
     color: Colors.accent4,
   },
-})
+});
 
-export const createMyNavigator = createNavigatorFactory(WorkoutTabs)
+export const createMyNavigator = createNavigatorFactory(WorkoutTabs);

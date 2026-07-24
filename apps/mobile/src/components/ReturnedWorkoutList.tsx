@@ -1,28 +1,37 @@
-import { View, FlatList, ListRenderItem } from 'react-native'
-import { Exercise } from '../types/types'
+import { View, FlatList, RefreshControl } from "react-native";
+import Colors from "../constants/Colors";
 
-const ReturnedWorkoutList = ({
-  data,
-  renderItem,
-}: {
-  data: Exercise[]
-  renderItem: ListRenderItem<Exercise>
+const ReturnedWorkoutList = (props: {
+  data: any[];
+  renderItem: any;
+  extraData?: any;
+  style?: any;
+  refreshing?: boolean;
+  onRefresh?: () => void;
+  listBottomInset?: number;
 }) => {
   return (
-    <View>
+    <View style={[{ flex: 1 }, props.style]}>
       <FlatList
-        data={data}
-        keyExtractor={(_, index) => index.toString()}
-        renderItem={renderItem}
-        initialNumToRender={10}
-        windowSize={5}
-        maxToRenderPerBatch={5}
-        updateCellsBatchingPeriod={30}
-        removeClippedSubviews={false}
-        onEndReachedThreshold={0.1}
+        data={props.data}
+        extraData={props.extraData}
+        keyExtractor={(item, index) => String(item.id ?? index)}
+        renderItem={props.renderItem}
+        contentContainerStyle={{
+          paddingBottom: props.listBottomInset ?? 16,
+        }}
+        refreshControl={
+          props.onRefresh ? (
+            <RefreshControl
+              refreshing={props.refreshing ?? false}
+              onRefresh={props.onRefresh}
+              tintColor={Colors.accent}
+            />
+          ) : undefined
+        }
       />
     </View>
-  )
-}
+  );
+};
 
-export default ReturnedWorkoutList
+export default ReturnedWorkoutList;
