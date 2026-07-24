@@ -1,0 +1,15 @@
+require("dotenv").config({ path: require("path").resolve(__dirname, ".env") });
+
+const appJson = require("./app.json");
+
+/** @type {import('expo/config').ExpoConfig} */
+module.exports = {
+  ...appJson.expo,
+  extra: {
+    ...appJson.expo.extra,
+    apiKey: process.env.EXPO_PUBLIC_API_KEY,
+    supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL,
+    supabaseKey: process.env.EXPO_PUBLIC_SUPABASE_KEY,
+    spotifyClientId: process.env.EXPO_PUBLIC_SPOTIFY_CLIENT_ID,
+  },
+};

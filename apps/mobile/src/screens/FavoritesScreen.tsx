@@ -1,5 +1,5 @@
-import React, { createRef } from 'react'
-import { connect } from 'react-redux'
+import React, { createRef } from "react";
+import { connect } from "react-redux";
 import {
   StyleSheet,
   Text,
@@ -7,54 +7,61 @@ import {
   FlatList,
   PanResponder,
   Animated,
-  SafeAreaView,
   TouchableOpacity,
   Pressable,
   Alert,
-} from 'react-native'
-import Colors from '../constants/Colors'
-import { faSquareMinus } from '@fortawesome/free-solid-svg-icons'
-import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome'
-import Play from '../components/Play'
-import FavoritesListLabelHeader from '../components/FavoritesListLabelHeader'
-import Message from '../components/Message'
-import { AddSetAction, SubtractSetAction } from '../store/actions'
-import { SubtractFavorite, clearFavorites } from '../store/actions'
-import { ScrollView, TextInput } from 'react-native-gesture-handler'
-import SetSelector from '../components/SetsSelector'
-import WorkoutTypeDropdown from '../components/WorkoutTypeDropdown'
-import { Exercise, WorkoutType } from '../types/types'
-import { Ionicons } from '@expo/vector-icons'
-import { ToolTip } from '../components/ToolTip'
-import NeomorphicStyles from '../constants/NeomorphicStyles'
-import NeomorphicButton from '../components/NeomorphicButton'
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import Colors from "../constants/Colors";
+import Play from "../components/Play";
+import Message from "../components/Message";
+import { SubtractFavorite, clearFavorites, setWorkout, setSessionSettings } from "../store/actions";
+import SetSelector from "../components/SetsSelector";
+import WorkoutTypeDropdown from "../components/WorkoutTypeDropdown";
+import { Exercise, WorkoutType } from "../types/types";
+import { Ionicons } from "@expo/vector-icons";
+import { ToolTip } from "../components/ToolTip";
+import { DISPLAY_FONT } from "../constants/Typography";
+import { RaisedCard } from "../components/RaisedCard";
+import { InsetButton } from "../components/InsetButton";
+import { ExerciseGif } from "../components/ExerciseGif";
+import { SmokyMountains } from "../components/SmokyMountains";
+import { SaveWorkoutModal } from "../components/SaveWorkoutModal";
+import { LoadSavedModal } from "../components/LoadSavedModal";
+import {
+  listSavedWorkouts,
+  loadSavedWorkoutExercises,
+  removeSavedWorkout,
+  saveNamedWorkout} from "../../utils/workoutStore";
+import type { SavedWorkout } from "../../utils/workoutApi";
 
 const mapStateToProps = (state) => {
   return {
     favorites: state.favorites.favoritedExercises,
-  }
-}
+    loadedWorkoutName: state.favorites.loadedWorkoutName as string | null,
+  };
+};
 
 const immutableMove = (arr: any[], from: number, to: number) => {
   return arr.reduce((prev, current, idx, self) => {
     if (from === to) {
-      prev.push(current)
+      prev.push(current);
     }
     if (idx === from) {
-      return prev
+      return prev;
     }
     if (from < to) {
-      prev.push(current)
+      prev.push(current);
     }
     if (idx === to) {
-      prev.push(self[from])
+      prev.push(self[from]);
     }
     if (from > to) {
-      prev.push(current)
+      prev.push(current);
     }
-    return prev
-  }, [])
-}
+    return prev;
+  }, []);
+};
 
 class FavoritesScreen extends React.Component {
   state = {
@@ -62,24 +69,26 @@ class FavoritesScreen extends React.Component {
     draggingIdx: -1,
     favorites: this.props.favorites,
     sets: 4,
-    type: 'Circuit',
+    type: "Circuit",
     showToolTip: false,
-  }
+    showSaveModal: false,
+    showLoadModal: false,
+    savedWorkouts: [] as SavedWorkout[]};
 
-  point = new Animated.ValueXY()
-  currentY = 0
-  scrollOffset = 0
-  flatlistTopOffset = 0
-  rowHeight = 0
-  currentIdx = -1
-  active = false
-  flatList = createRef()
-  flatListHeight = 0
-  count = createRef(0)
-  _panResponder: any
+  point = new Animated.ValueXY();
+  currentY = 0;
+  scrollOffset = 0;
+  flatlistTopOffset = 0;
+  rowHeight = 0;
+  currentIdx = -1;
+  active = false;
+  flatList = createRef();
+  flatListHeight = 0;
+  count = createRef(0);
+  _panResponder: any;
 
   constructor(props) {
-    super(props)
+    super(props);
 
     this._panResponder = PanResponder.create({
       // Ask to be the responder:
@@ -92,21 +101,19 @@ class FavoritesScreen extends React.Component {
         // The gesture has started. Show visual feedback so the user knows
         // what is happening!
         // gestureState.d{x,y} will be set to zero now
-        this.currentIdx = this.yToIndex(gestureState.y0)
-        this.currentY = gestureState.y0
+        this.currentIdx = this.yToIndex(gestureState.y0);
+        this.currentY = gestureState.y0;
         Animated.event([{ y: this.point.y }], { useNativeDriver: false })({
-          y: gestureState.y0 - this.rowHeight / 2,
-        })
-        this.active = true
+          y: gestureState.y0 - this.rowHeight / 2});
+        this.active = true;
         this.setState({ dragging: true, draggingIdx: this.currentIdx }, () => {
-          this.animateList()
-        })
+          this.animateList();
+        });
       },
       onPanResponderMove: (evt, gestureState) => {
-        this.currentY = gestureState.moveY
+        this.currentY = gestureState.moveY;
         Animated.event([{ y: this.point.y }], { useNativeDriver: false })({
-          y: gestureState.moveY,
-        })
+          y: gestureState.moveY});
         // The most recent move distance is gestureState.move{X,Y}
         // The accumulated gesture distance since becoming responder is
         // gestureState.d{x,y}
@@ -115,24 +122,23 @@ class FavoritesScreen extends React.Component {
       onPanResponderRelease: (evt, gestureState) => {
         // The user has released all touches while this view is the
         // responder. This typically means a gesture has succeeded
-        this.reset()
+        this.reset();
       },
       onPanResponderTerminate: (evt, gestureState) => {
         // Another component has become the responder, so this gesture
         // should be cancelled
-        this.reset()
+        this.reset();
       },
       onShouldBlockNativeResponder: (evt, gestureState) => {
         // Returns whether this component should block native components from becoming the JS
         // responder. Returns true by default. Is currently only supported on android.
-        return true
-      },
-    })
+        return true;
+      }});
   }
 
   animateList = () => {
     if (!this.active) {
-      return
+      return;
     }
 
     requestAnimationFrame(() => {
@@ -140,17 +146,15 @@ class FavoritesScreen extends React.Component {
       if (this.currentY + 100 > this.flatListHeight) {
         this.flatList.current.scrollToOffset({
           offset: this.scrollOffset + 20,
-          animated: false,
-        })
+          animated: false});
       } else if (this.currentY < 100) {
         this.flatList.current.scrollToOffset({
           offset: this.scrollOffset - 20,
-          animated: false,
-        })
+          animated: false});
       }
 
       // check y value see if we need to reorder
-      const newIdx = this.yToIndex(this.currentY)
+      const newIdx = this.yToIndex(this.currentY);
       if (this.currentIdx !== newIdx) {
         this.setState({
           favorites: immutableMove(
@@ -158,36 +162,35 @@ class FavoritesScreen extends React.Component {
             this.currentIdx,
             newIdx
           ),
-          draggingIdx: newIdx,
-        })
-        this.currentIdx = newIdx
+          draggingIdx: newIdx});
+        this.currentIdx = newIdx;
       }
 
-      this.animateList()
-    })
-  }
+      this.animateList();
+    });
+  };
 
   yToIndex = (y) => {
     const value = Math.floor(
       (this.scrollOffset + y - this.flatlistTopOffset) / this.rowHeight
-    )
+    );
 
     if (value < 0) {
-      return 0
+      return 0;
     }
 
     if (value > this.state.favorites.length - 1) {
-      return this.state.favorites.length - 1
+      return this.state.favorites.length - 1;
     }
 
-    return value
-  }
+    return value;
+  };
 
   //resets when user moves something in list
   reset = () => {
-    this.active = false
-    this.setState({ dragging: false, draggingIdx: -1 })
-  }
+    this.active = false;
+    this.setState({ dragging: false, draggingIdx: -1 });
+  };
 
   // updating state so user can add more favorites to their list and have it rerender the flatlist
   componentDidUpdate(prevProps: { favorites: Exercise[] }) {
@@ -195,366 +198,514 @@ class FavoritesScreen extends React.Component {
       // let a = prevProps.favorites;
       // let b = this.props.favorites;
       // const c = a.concat(b.filter((item) => a.indexOf(item) < 0))
-      this.count.current = 0
+      this.count.current = 0;
       return this.setState({
-        favorites: this.props.favorites,
-      })
+        favorites: this.props.favorites});
     }
   }
 
   handleSetSelect = (selectedSets: number): void => {
-    this.setState({ sets: selectedSets })
-  }
+    this.setState({ sets: selectedSets });
+    this.props.setSessionSettings(selectedSets, this.state.type);
+  };
 
   handleWorkoutType = (type: WorkoutType): void => {
-    this.setState({ type: type })
+    this.setState({ type: type });
+    this.props.setSessionSettings(this.state.sets, type as any);
+  };
+
+  componentDidMount() {
+    this.refreshSaved();
   }
 
+  refreshSaved = async () => {
+    try {
+      const savedWorkouts = await listSavedWorkouts();
+      this.setState({ savedWorkouts });
+    } catch (e) {
+      console.warn(e);
+    }
+  };
+
+  handleSaveWorkout = async (name: string) => {
+    await saveNamedWorkout(name, this.state.favorites);
+    await this.refreshSaved();
+    this.props.setWorkout(this.state.favorites, name);
+    Alert.alert("Saved", `"${name}" is ready to load anytime.`);
+  };
+
+  handleLoadWorkout = async (workout: SavedWorkout) => {
+    const exercises = await loadSavedWorkoutExercises(workout.id);
+    if (!exercises.length) {
+      Alert.alert("Empty", "That workout has no exercises.");
+      return;
+    }
+    this.props.setWorkout(exercises, workout.name);
+    Alert.alert("Loaded", `"${workout.name}" is in My Workout.`);
+  };
+
+  handleDeleteSaved = (workout: SavedWorkout) => {
+    Alert.alert("Delete saved workout", `Remove "${workout.name}"?`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          await removeSavedWorkout(workout.id);
+          await this.refreshSaved();
+        }},
+    ]);
+  };
+
+  openLoadModal = async () => {
+    await this.refreshSaved();
+    this.setState({ showLoadModal: true });
+  };
+
   render() {
-    const { favorites, dragging, draggingIdx } = this.state
+    const { favorites, dragging, draggingIdx } = this.state;
 
     const renderItem = ({ item, index }, noPanResponder = false) => (
-      <View
+      <RaisedCard
         onLayout={(e) => {
-          this.rowHeight = e.nativeEvent.layout.height
+          this.rowHeight = e.nativeEvent.layout.height;
         }}
         style={[
-          {
-            ...NeomorphicStyles,
-            flex: 1,
-            flexDirection: 'row',
-            margin: 10,
-            opacity: draggingIdx === index ? 0 : 1,
-            justifyContent: 'space-between',
-            paddingVertical: 2,
-            paddingHorizontal: 15,
-            // marginHorizontal: 5,
-            marginBottom: 4,
-          },
+          styles.row,
+          draggingIdx === index && styles.rowDragging,
         ]}
       >
-        <View style={{ flexDirection: 'row' }}>
-          <View {...(noPanResponder ? {} : this._panResponder.panHandlers)}>
-            <Text style={styles.icon}>&uarr;&darr;</Text>
-          </View>
-          <View style={{ margin: 10 }}>
-            <TouchableOpacity
-              onPress={() => {
-                this.props.navigation.navigate('Details', {
-                  id: item.id,
-                  name: item.name,
-                })
-              }}
-            >
-              <Text numberOfLines={1} style={styles.name}>
-                {item.name.length < 25
-                  ? item.name.replace(
-                      item.equipment,
-                      item.equipment.slice(0, 1) + '-'
-                    )
-                  : item.name
-                      .replace(item.equipment, item.equipment.slice(0, 1) + '-')
-                      .slice(0, 25) + '...'}
-              </Text>
-            </TouchableOpacity>
-            <Text numberOfLines={1} style={styles.equipment}>
-              {item.equipment}
-            </Text>
-          </View>
+        <View
+          {...(noPanResponder ? {} : this._panResponder.panHandlers)}
+          style={styles.dragHandle}
+        >
+          <Ionicons name="reorder-three" size={22} color={Colors.textMuted} />
         </View>
-        <View style={{ alignSelf: 'center', margin: 12 }}>
-          <Pressable
-            onPress={() => {
-              this.props.SubtractFavorite(
-                item.id,
-                item.name,
-                item.gifUrl,
-                item.equipment
-              )
-            }}
-          >
-            <FontAwesomeIcon
-              size={25}
-              style={styles.icon}
-              icon={faSquareMinus}
-            />
-          </Pressable>
-        </View>
-      </View>
-    )
+
+        <Text style={styles.index}>{index + 1}</Text>
+
+        <ExerciseGif
+          exerciseId={item.id}
+          resolution={180}
+          style={styles.thumb}
+        />
+
+        <TouchableOpacity
+          style={styles.rowContent}
+          onPress={() => {
+            this.props.navigation.navigate("Details", {
+              id: item.id,
+              name: item.name});
+          }}
+        >
+          <Text numberOfLines={1} style={styles.name}>
+            {item.name}
+          </Text>
+          <Text numberOfLines={1} style={styles.equipment}>
+            {item.equipment}
+          </Text>
+        </TouchableOpacity>
+
+        <InsetButton
+          size={36}
+          onPress={() => {
+            this.props.SubtractFavorite(
+              item.id,
+              item.name,
+              item.gifUrl,
+              item.equipment
+            );
+          }}
+        >
+          <Ionicons name="remove" size={20} color={Colors.accent4} />
+        </InsetButton>
+      </RaisedCard>
+    );
 
     return (
-      <SafeAreaView style={styles.screen}>
-        <Text style={styles.header}>Organize Your Sets</Text>
+      <SafeAreaView style={styles.screen} edges={["top"]}>
+        <View style={styles.atmosphere} pointerEvents="none">
+          <SmokyMountains intensity={0.32} />
+        </View>
+        <View style={styles.headerRow}>
+          <View style={styles.headerText}>
+            <Text style={styles.header}>My Workout</Text>
+            <Text style={styles.subheader}>
+              {favorites.length
+                ? `${favorites.length} exercise${favorites.length === 1 ? "" : "s"}`
+                : "Browse exercises in Build to get started"}
+            </Text>
+          </View>
+          <View style={styles.headerActions}>
+            <Pressable
+              onPress={this.openLoadModal}
+              style={[
+                styles.loadHeaderBtn,
+                !!this.props.loadedWorkoutName && styles.loadHeaderBtnActive,
+              ]}
+              hitSlop={6}
+            >
+              <Ionicons
+                name="folder-open-outline"
+                size={18}
+                color={
+                  this.props.loadedWorkoutName
+                    ? Colors.glowCyan
+                    : Colors.accent
+                }
+              />
+              <Text
+                style={[
+                  styles.loadHeaderText,
+                  !!this.props.loadedWorkoutName && styles.loadHeaderTextActive,
+                ]}
+                numberOfLines={1}
+              >
+                {this.props.loadedWorkoutName
+                  ? this.props.loadedWorkoutName
+                  : "Load"}
+              </Text>
+            </Pressable>
+            {favorites.length > 0 && (
+              <View style={styles.countBadge}>
+                <Text style={styles.countText}>{favorites.length}</Text>
+              </View>
+            )}
+          </View>
+        </View>
+
         {favorites.length ? (
           <>
-            <Text style={styles.directionHeader}>
-              Hold arrows to drag and drop and organize by equipment.
-            </Text>
+            <RaisedCard style={styles.controlsCard}>
+              <View style={styles.controlsRow}>
+                <View style={styles.controlGroup}>
+                  <Text style={styles.controlLabel}>Sets</Text>
+                  <SetSelector
+                    onSelect={this.handleSetSelect}
+                    sets={4}
+                    currentSet={this.state.sets}
+                  />
+                </View>
 
-            <View
-              style={{
-                justifyContent: 'space-between',
-                flexDirection: 'row',
-                width: '100%',
-                alignItems: 'center',
-
-                paddingHorizontal: 10,
-                borderRadius: 6,
-                marginBottom: 4,
-              }}
-            >
-              <>
-                <SetSelector
-                  onSelect={this.handleSetSelect}
-                  sets={4}
-                  currentSet={this.state.sets}
-                />
-                <View style={{ flexDirection: 'row' }}>
+                <View style={styles.controlGroup}>
+                  <View style={styles.modeHeader}>
+                    <Text style={styles.controlLabel}>Mode</Text>
+                    <Pressable
+                      onPress={() =>
+                        this.setState({ showToolTip: !this.state.showToolTip })
+                      }
+                      hitSlop={8}
+                    >
+                      <Ionicons
+                        name="information-circle-outline"
+                        size={18}
+                        color={Colors.textMuted}
+                      />
+                    </Pressable>
+                  </View>
                   <WorkoutTypeDropdown
                     type={this.state.type}
                     setType={this.handleWorkoutType}
                   />
-                  <Pressable
-                    onPress={() =>
-                      this.setState({ showToolTip: !this.state.showToolTip })
-                    }
-                  >
-                    <Ionicons
-                      name="help-circle-outline"
-                      size={21}
-                      color={Colors.primary}
-                    />
-                  </Pressable>
                 </View>
-              </>
-              <NeomorphicButton
-                extraTextStyles={{ fontSize: 16 }}
-                extraButtonStyles={{
-                  padding: 7,
-                  paddingVertical: 10,
-                  backgroundColor: Colors.accent,
-                  shadowColor: Colors.accent,
-                }}
-                title="Clear"
-                onPress={() => {
-                  Alert.alert(
-                    'Clear All',
-                    'Would you like to remove all exercises from the list?',
-                    [
-                      {
-                        text: 'Cancel',
-                        onPress: () => {},
-                      },
-                      {
-                        text: 'Remove All',
-                        onPress: () => {
-                          this.props.clearFavorites()
-                        },
-                        style: 'cancel',
-                      },
-                    ]
-                  )
-                }}
-              />
-            </View>
-            <FavoritesListLabelHeader />
+              </View>
+
+              <Text style={styles.modeHint}>
+                {this.state.type === "Circuit"
+                  ? "Circuit — rotate through all exercises each round"
+                  : "Straight — finish all sets of each exercise before moving on"}
+              </Text>
+            </RaisedCard>
+
+            <Text style={styles.reorderHint}>
+              Hold ≡ to drag and reorder exercises
+            </Text>
+
             {dragging && (
               <Animated.View
-                style={{
-                  position: 'absolute',
-                  backgroundColor: 'transparent',
-                  zIndex: 2,
-                  width: '100%',
-                  top: this.point.getLayout().top,
-                }}
+                style={[
+                  styles.dragOverlay,
+                  { top: this.point.getLayout().top },
+                ]}
               >
                 {renderItem({ item: favorites[draggingIdx], index: -1 }, true)}
               </Animated.View>
             )}
+
             {this.state.showToolTip && (
               <ToolTip close={() => this.setState({ showToolTip: false })} />
             )}
-            {/* <View style={{paddingHorizontal: 5}}> */}
+
             <FlatList
               ref={this.flatList}
               scrollEnabled={!dragging}
-              style={{ width: '100%' }}
+              style={styles.list}
+              contentContainerStyle={styles.listContent}
               data={favorites}
-              ListEmptyComponent={<Message />}
               renderItem={renderItem}
               onScroll={(e) => {
-                this.scrollOffset = e.nativeEvent.contentOffset.y
+                this.scrollOffset = e.nativeEvent.contentOffset.y;
               }}
               onLayout={(e) => {
-                this.flatlistTopOffset = e.nativeEvent.layout.y
-                this.flatListHeight = e.nativeEvent.layout.height
+                this.flatlistTopOffset = e.nativeEvent.layout.y;
+                this.flatListHeight = e.nativeEvent.layout.height;
               }}
               scrollEventThrottle={16}
-              keyExtractor={(item) => '' + item.id}
+              keyExtractor={(item) => String(item.id)}
             />
-            {/* </View> */}
 
-            <Play
-              favorites={this.state.favorites}
-              sets={this.state.sets}
-              type={this.state.type}
-            />
+            <View style={styles.actionStack}>
+              <View style={styles.secondaryActions}>
+                <Pressable
+                  onPress={() => this.setState({ showSaveModal: true })}
+                  style={({ pressed }) => [
+                    styles.chipBtn,
+                    styles.saveChip,
+                    pressed && styles.chipPressed,
+                  ]}
+                >
+                  <Ionicons name="bookmark" size={16} color={Colors.twentyThree} />
+                  <Text style={styles.saveChipText}>Save</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => {
+                    Alert.alert(
+                      "Clear workout",
+                      "Remove all exercises from your workout?",
+                      [
+                        { text: "Cancel", style: "cancel" },
+                        {
+                          text: "Clear all",
+                          style: "destructive",
+                          onPress: () => this.props.clearFavorites()},
+                      ]
+                    );
+                  }}
+                  style={({ pressed }) => [
+                    styles.chipBtn,
+                    styles.clearChip,
+                    pressed && styles.chipPressed,
+                  ]}
+                >
+                  <Ionicons
+                    name="trash-outline"
+                    size={16}
+                    color={Colors.accent4}
+                  />
+                  <Text style={styles.clearChipText}>Clear</Text>
+                </Pressable>
+              </View>
+              <Play
+                favorites={this.state.favorites}
+                sets={this.state.sets}
+                type={this.state.type}
+              />
+            </View>
           </>
         ) : (
           <Message />
         )}
+
+        <SaveWorkoutModal
+          visible={this.state.showSaveModal}
+          onClose={() => this.setState({ showSaveModal: false })}
+          onSave={this.handleSaveWorkout}
+        />
+        <LoadSavedModal
+          visible={this.state.showLoadModal}
+          workouts={this.state.savedWorkouts}
+          onClose={() => this.setState({ showLoadModal: false })}
+          onLoad={this.handleLoadWorkout}
+          onDelete={this.handleDeleteSaved}
+        />
       </SafeAreaView>
-    )
+    );
   }
 }
 
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    padding: 10,
-    backgroundColor: Colors.twentyThree,
-    width: '100%',
-  },
-
-  workoutItem: {
-    borderRadius: 20,
-  },
-  name: {
-    color: Colors.accent,
-    textTransform: 'capitalize',
-    fontSize: 17,
-  },
-
-  equipment: {
-    color: Colors.accent3,
-    fontWeight: '300',
-  },
-
-  icon: {
-    color: Colors.accent,
-
-    fontSize: 25,
-    alignSelf: 'center',
-    padding: 8,
-    fontWeight: 'bold',
-  },
-
-  container: {
-    alignItems: 'center',
-    width: '100%',
-    borderRadius: 5,
-    backgroundColor: Colors.twentyThree,
-    // padding: 10,
-  },
-  input: {
-    borderWidth: 2,
+    backgroundColor: Colors.twentyThree},
+  atmosphere: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 240},
+  headerRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 8},
+  headerText: {
+    flex: 1,
+    minWidth: 0,
+    marginRight: 12},
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8},
+  loadHeaderBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
     borderRadius: 12,
-    padding: 8,
-    backgroundColor: Colors.inner,
-    borderColor: 'transparent',
-    color: 'white',
+    backgroundColor: "rgba(152, 242, 231, 0.1)",
+    borderWidth: 1,
+    borderColor: "rgba(152, 242, 231, 0.25)",
+    maxWidth: 140,
   },
-
-  touch: {
-    alignSelf: 'center',
+  loadHeaderBtnActive: {
+    backgroundColor: Colors.glowCyanDim,
+    borderColor: "rgba(0, 212, 255, 0.35)",
   },
-  directionHeader: {
-    color: 'white',
-    fontWeight: '200',
-    fontSize: 15,
-    textAlign: 'left',
-    paddingRight: 55,
-    margin: 5,
+  loadHeaderText: {
+    color: Colors.accent,
+    fontSize: 13,
+    fontWeight: "700",
+    flexShrink: 1,
+  },
+  loadHeaderTextActive: {
+    color: Colors.glowCyan,
   },
   header: {
-    fontSize: 25,
-    // fontWeight: '100',
+    fontSize: 34,
+    fontFamily: DISPLAY_FONT,
     color: Colors.accent,
-    textAlign: 'left',
-    alignSelf: 'flex-start',
-  },
-  quantityBtn: {
-    color: 'white',
-    fontSize: 18,
-    padding: 4,
-    borderColor: 'white',
-    borderWidth: 1,
-    borderRadius: 5,
-    textAlign: 'center',
-    margin: 3,
-    backgroundColor: '#111',
-    width: 25,
-  },
-  quantity: {
-    flexDirection: 'row',
-    marginHorizontal: 5,
-  },
-  quantitySpan: {
-    color: 'white',
-    fontSize: 16,
-    padding: 5,
-    textAlign: 'center',
-    margin: 5,
-    backgroundColor: '#111',
-    borderRadius: 4,
-  },
-  separator: {
-    backgroundColor: Colors.accent,
-    position: 'absolute',
-    zIndex: 30,
-    marginTop: -6,
-    width: '120%',
-  },
-  separatorText: {
-    color: Colors.twentyThree,
-    fontSize: 18,
-    fontWeight: '800',
-    marginHorizontal: 10,
-    alignSelf: 'center',
-    padding: 3,
-  },
-
-  clear: {
-    color: 'red',
+    letterSpacing: 1.5},
+  subheader: {
+    color: Colors.textMuted,
     fontSize: 14,
-    // marginVertical: 5,
-  },
-})
+    marginTop: 4},
+  countBadge: {
+    backgroundColor: Colors.accent4,
+    borderRadius: 20,
+    minWidth: 36,
+    height: 36,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 10},
+  countText: {
+    color: "#fff",
+    fontWeight: "700",
+    fontSize: 16},
+  controlsCard: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+    padding: 14},
+  controlsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between"},
+  controlGroup: {
+    flex: 1},
+  controlLabel: {
+    color: Colors.textMuted,
+    fontSize: 12,
+    marginBottom: 4,
+    textTransform: "uppercase",
+    letterSpacing: 0.5},
+  modeHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4},
+  modeHint: {
+    color: Colors.textMuted,
+    fontSize: 12,
+    marginTop: 10,
+    lineHeight: 18},
+  reorderHint: {
+    color: Colors.textMuted,
+    fontSize: 12,
+    textAlign: "center",
+    marginBottom: 8,
+    marginHorizontal: 16},
+  actionStack: {
+    gap: 12,
+    paddingTop: 4,
+    paddingHorizontal: 20},
+  secondaryActions: {
+    flexDirection: "row",
+    gap: 10},
+  chipBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 12,
+    borderRadius: 14},
+  saveChip: {
+    backgroundColor: Colors.accent},
+  saveChipText: {
+    color: Colors.twentyThree,
+    fontSize: 15,
+    fontWeight: "700",
+    letterSpacing: 0.3},
+  clearChip: {
+    backgroundColor: Colors.surface,
+    borderWidth: 1.5,
+    borderColor: "rgba(168, 97, 95, 0.45)"},
+  clearChipText: {
+    color: Colors.accent4,
+    fontSize: 15,
+    fontWeight: "700",
+    letterSpacing: 0.3},
+  chipPressed: {
+    opacity: 0.85,
+    transform: [{ scale: 0.98 }]},
+  list: {
+    flex: 1},
+  listContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 8},
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    marginBottom: 10,
+    gap: 8},
+  rowDragging: {
+    opacity: 0},
+  dragHandle: {
+    padding: 4},
+  dragOverlay: {
+    position: "absolute",
+    zIndex: 10,
+    width: "100%",
+    paddingHorizontal: 16},
+  index: {
+    color: Colors.textMuted,
+    fontSize: 14,
+    width: 18,
+    textAlign: "center"},
+  thumb: {
+    width: 64,
+    height: 64,
+    borderRadius: 8,
+    overflow: "hidden"},
+  rowContent: {
+    flex: 1,
+    minWidth: 0},
+  name: {
+    color: "#fff",
+    textTransform: "capitalize",
+    fontSize: 15,
+    fontWeight: "500"},
+  equipment: {
+    color: Colors.textMuted,
+    fontSize: 12,
+    marginTop: 2,
+    textTransform: "capitalize"}});
 
 export default connect(mapStateToProps, {
   SubtractFavorite,
-  AddSetAction,
-  SubtractSetAction,
   clearFavorites,
-})(FavoritesScreen)
-
-// modular does not work so Here i have to create ref to control what I call better ui flatlist
-// setting sets per group so each group is even and so the ui is less cluttered
-
-// renderSeparator = (e) => {
-//   this.count.current += 1;
-//   return this.count.current % 4 == 0 ? (
-//     <View style={styles.separator}>
-//       <Text style={styles.separatorText}>Next Group</Text>
-//       <View style={styles.quantity}>
-//         <Text style={styles.separatorText}>Sets</Text>
-//         <TouchableOpacity
-//           onPress={() => {
-//             dispatch(AddSetAction());
-//           }}
-//         >
-//           <Text style={styles.quantityBtn}>+</Text>
-//         </TouchableOpacity>
-//         <Text style={styles.quantitySpan}>4</Text>
-//         <TouchableOpacity
-//           onPress={() => {
-//             dispatch(SubtractSetAction());
-//           }}
-//         >
-//           <Text style={styles.quantityBtn}>-</Text>
-//         </TouchableOpacity>
-//       </View>
-//     </View>
-//   ) : null;
-// };
+  setWorkout,
+  setSessionSettings})(FavoritesScreen);

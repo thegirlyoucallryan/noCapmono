@@ -1,21 +1,45 @@
-import React, { useState, useEffect, useCallback } from "react";
-import { View, Text, StyleSheet, Image, Dimensions } from "react-native";
-import { HeaderButtons, Item } from "react-navigation-header-buttons";
-import CustomHeaderButton from "../components/HeaderButton";
-import { useDispatch } from "react-redux";
+import React, { useState, useEffect } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  Dimensions,
+  Pressable,
+  ScrollView,
+} from "react-native";
+import { useDispatch, useSelector } from "react-redux";
 import { AddFavorite } from "../store/actions";
 import Colors from "../constants/Colors";
 import { useNavigation } from "@react-navigation/native";
 import { Exercise } from "../types/types";
-//@ts-ignore
-import { EXPO_PUBLIC_API_KEY } from "@env";
+import { fetchExercises } from "../../utils/exerciseApi";
+import { ExerciseGif } from "../components/ExerciseGif";
+import { RaisedCard } from "../components/RaisedCard";
+import { GradientCTA } from "../components/GradientCTA";
+import { ExerciseProgressCard } from "../components/ExerciseProgressCard";
+import {
+  navigateToMyWorkout,
+  WORKOUT_MINI_BAR_INSET,
+} from "../components/WorkoutMiniBar";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 
-const WorkoutDetail = ({ route }: any) => {
+const WorkoutListDetailScreen = ({ route }: any) => {
   const id = route.params.id;
   const nav = useNavigation();
   const [exercise, setExercise] = useState<Exercise>();
+  const dispatch = useDispatch();
+  const favoritedExercises = useSelector(
+    (s: any) => s.favorites.favoritedExercises
+  );
+  const alreadyAdded = favoritedExercises.some(
+    (e: Exercise) => e.id === id
+  );
+  const [added, setAdded] = useState(alreadyAdded);
+
+  useEffect(() => {
+    setAdded(alreadyAdded);
+  }, [alreadyAdded]);
 
   useEffect(() => {
     if (exercise) {
@@ -24,61 +48,85 @@ const WorkoutDetail = ({ route }: any) => {
         headerTitleStyle: { color: Colors.accent, fontWeight: "100" },
         headerTintColor: Colors.inner,
         headerTitle:
-          exercise &&
-          exercise?.name.charAt(0).toUpperCase() + exercise.name.slice(1),
+          exercise.name.charAt(0).toUpperCase() + exercise.name.slice(1),
       });
     }
   }, [exercise?.name]);
 
-  const dispatch = useDispatch();
-
   const getWorkout = async () => {
-    let response = await fetch(
-      `https://exercisedb.p.rapidapi.com/exercises/exercise/${id}`,
-      {
-        method: "GET",
-        headers: {
-          "x-rapidapi-host": "exercisedb.p.rapidapi.com",
-          "x-rapidapi-key": EXPO_PUBLIC_API_KEY,
-        },
-      }
-    );
-    const resData = await response.json();
-
-    setExercise(resData);
+    try {
+      const resData = await fetchExercises(`/exercises/exercise/${id}`);
+      setExercise(resData as Exercise);
+    } catch (error: any) {
+      console.error("[API error]", error.message);
+    }
   };
 
   useEffect(() => {
     getWorkout();
   }, [id]);
 
-  //   const addToWorkoutHandler = useCallback(() => {
-  //     dispatch(
-  //       AddFavorite(
-  //         exercise?.id,
-  //         exercise?.name,
-  //         exercise?.gifUrl,
-  //         exercise?.equipment
-  //       )
-  //     );
-  //     nav.goBack();
-  //   }, [exercise]);
-
-  //   useEffect(() => {
-  //     nav.setParams({ add: addToWorkoutHandler });
-  //   }, [addToWorkoutHandler]);
+  const handleAdd = () => {
+    if (!exercise || added) return;
+    dispatch(
+      AddFavorite(
+        exercise.id,
+        exercise.name,
+        exercise.gifUrl,
+        exercise.equipment,
+        exercise.bodyPart
+      )
+    );
+    setAdded(true);
+  };
 
   return (
     <View style={styles.screen}>
-      {/* <Text style={styles.infoname}>{exercise?.name}</Text> */}
-      <View style={styles.trickContainer}>
-        {exercise?.gifUrl && (
-          <Image style={styles.image} source={{ uri: exercise?.gifUrl }} />
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        {exercise?.id && (
+          <RaisedCard style={styles.gifCard}>
+            <ExerciseGif exerciseId={exercise.id} style={styles.image} />
+          </RaisedCard>
         )}
-        <View style={styles.infobox}>
-          <Text style={styles.info}>Equipment: {exercise?.equipment}</Text>
-          <Text style={styles.info}>Area worked: {exercise?.bodyPart}</Text>
-        </View>
+
+        <RaisedCard style={styles.infoCard}>
+          <Text style={styles.infoLabel}>Equipment</Text>
+          <Text style={styles.infoValue}>{exercise?.equipment ?? "—"}</Text>
+          <Text style={[styles.infoLabel, { marginTop: 12 }]}>Target area</Text>
+          <Text style={styles.infoValue}>{exercise?.bodyPart ?? "—"}</Text>
+        </RaisedCard>
+
+        {id ? (
+          <ExerciseProgressCard
+            exerciseId={id}
+            bodyPart={exercise?.bodyPart}
+            equipment={exercise?.equipment}
+            exerciseName={exercise?.name}
+          />
+        ) : null}
+      </ScrollView>
+
+      <View style={styles.footer}>
+        <GradientCTA
+          title={added ? "In your workout" : "Add to workout"}
+          icon={added ? "checkmark" : "add"}
+          disabled={added || !exercise}
+          onPress={handleAdd}
+        />
+
+        {added && (
+          <Pressable
+            onPress={() => navigateToMyWorkout(nav)}
+            style={styles.viewWorkout}
+          >
+            <Text style={styles.viewWorkoutText}>View My Workout →</Text>
+          </Pressable>
+        )}
       </View>
     </View>
   );
@@ -87,45 +135,56 @@ const WorkoutDetail = ({ route }: any) => {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
     backgroundColor: Colors.twentyThree,
   },
-  trickContainer: {
+  scroll: {
     flex: 1,
-    alignItems: "center",
   },
-
+  content: {
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 16,
+  },
+  gifCard: {
+    alignItems: "center",
+    padding: 8,
+    marginBottom: 16,
+  },
   image: {
-    marginTop: 15,
-
-    // borderRadius: 40,
-    width: SCREEN_WIDTH,
-    height: SCREEN_WIDTH,
+    width: SCREEN_WIDTH * 0.82,
+    height: SCREEN_WIDTH * 0.82,
   },
-
-  timerContainer: {
-    alignItems: "center",
+  infoCard: {
+    padding: 18,
   },
-  info: {
-    color: Colors.primary,
-    margin: 11,
-    letterSpacing: 1,
-    fontSize: 14,
-  },
-  infobox: {
-    margin: 15,
-    padding: 10,
-    flexDirection: "row",
-  },
-  infoname: {
-    color: Colors.accent,
+  infoLabel: {
+    color: Colors.textMuted,
+    fontSize: 12,
     textTransform: "uppercase",
-    fontSize: 18,
-    marginTop: 15,
-    textAlign: "center",
-    marginHorizontal: 5,
+    letterSpacing: 0.5,
+  },
+  infoValue: {
+    color: "#fff",
+    fontSize: 16,
+    marginTop: 4,
+    textTransform: "capitalize",
+  },
+  footer: {
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: WORKOUT_MINI_BAR_INSET + 12,
+    gap: 4,
+  },
+  viewWorkout: {
+    alignItems: "center",
+    marginTop: 10,
+    paddingBottom: 4,
+  },
+  viewWorkoutText: {
+    color: Colors.accent,
+    fontSize: 15,
+    fontWeight: "600",
   },
 });
 
-export default WorkoutDetail;
+export default WorkoutListDetailScreen;

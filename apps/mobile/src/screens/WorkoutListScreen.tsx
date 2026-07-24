@@ -1,72 +1,96 @@
-import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from "react-native";
 import ReturnedWorkoutList from "../components/ReturnedWorkoutList";
 import Colors from "../constants/Colors";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { FontAwesomeIcon } from "@fortawesome/react-native-fontawesome";
-import { faBlackboard, faSquarePlus } from "@fortawesome/free-solid-svg-icons";
 import { AddFavorite } from "../store/actions";
-import axios from "axios";
 import { useNavigation } from "@react-navigation/native";
 import { Exercise } from "../types/types";
-import NeomorphicStyles from "../constants/NeomorphicStyles";
-//@ts-ignore
-import { EXPO_PUBLIC_API_KEY } from "@env";
+import { fetchExercises } from "../../utils/exerciseApi";
+import { RaisedCard } from "../components/RaisedCard";
+import { InsetButton } from "../components/InsetButton";
+import { ExerciseGif } from "../components/ExerciseGif";
+import { Ionicons } from "@expo/vector-icons";
+import { WORKOUT_MINI_BAR_INSET } from "../components/WorkoutMiniBar";
+import { ToastBanner } from "../components/ToastBanner";
 
 const WorkoutList = ({ route }: any) => {
-  const [exercises, setExercises] = useState([]);
+  const [exercises, setExercises] = useState<Exercise[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState("");
+  const [toastVisible, setToastVisible] = useState(false);
   const nav = useNavigation();
-  let url: string;
-  const searchQuery = route.params.userInput;
-  const equipment = route.params.equipment;
-  const bodyPart = route.params.bodyPart;
-  const { favoritedExercises } = useSelector((s) => s.favorites);
+  const searchQuery = route.params?.userInput;
+  const equipment = route.params?.equipment;
+  const bodyPart = route.params?.bodyPart;
+  const { favoritedExercises } = useSelector((s: any) => s.favorites);
 
-
-  function isExerciseFavorited(exerciseName: string) {
-    for (const exercise of favoritedExercises) {
-      if (exercise.name === exerciseName) {
-        return true;
-      }
-    }
-    return false;
+  function isExerciseInWorkout(exerciseId: string) {
+    return favoritedExercises.some(
+      (exercise: Exercise) => exercise.id === exerciseId
+    );
   }
 
-  const header = searchQuery || equipment || bodyPart;
+  const showToast = useCallback((message: string) => {
+    setToast(message);
+    setToastVisible(true);
+    setTimeout(() => setToastVisible(false), 2200);
+  }, []);
+
+  const header = searchQuery || equipment || bodyPart || "Exercises";
 
   useEffect(() => {
     nav.setOptions({
       headerShown: true,
-
       headerTitleStyle: { color: Colors.accent },
       headerTintColor: Colors.inner,
-      headerTitle: header.charAt(0).toUpperCase() + header.slice(1),
+      headerTitle: String(header).charAt(0).toUpperCase() + String(header).slice(1),
     });
-  }, []);
+  }, [header]);
 
-  if (equipment) {
-    url = `https://exercisedb.p.rapidapi.com/exercises/equipment/${equipment}`;
-  } else if (bodyPart) {
-    url = `https://exercisedb.p.rapidapi.com/exercises/bodyPart/${bodyPart}`;
-  } else if (searchQuery) {
-    url = `https://exercisedb.p.rapidapi.com/exercises/name/${searchQuery.toLowerCase()}`;
-  }
+  const getWorkout = async (isRefresh = false) => {
+    let path: string | undefined;
+    if (equipment) {
+      path = `/exercises/equipment/${encodeURIComponent(equipment)}`;
+    } else if (bodyPart) {
+      path = `/exercises/bodyPart/${encodeURIComponent(String(bodyPart).toLowerCase())}`;
+    } else if (searchQuery) {
+      path = `/exercises/name/${encodeURIComponent(searchQuery.toLowerCase())}`;
+    }
 
-  const getWorkout = async () => {
-    await axios
-      .get(url, {
-        headers: {
-          "x-rapidapi-host": "exercisedb.p.rapidapi.com",
-          "x-rapidapi-key": EXPO_PUBLIC_API_KEY,
-        },
-      })
-      .then(function (response) {
-        const resData = response.data;
-        setExercises(resData);
-      })
-      .catch(function (error) {
-        console.log(error.message);
-      });
+    if (!path) {
+      setError("No search query provided.");
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
+
+    if (isRefresh) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
+    setError(null);
+
+    try {
+      const data = await fetchExercises(path);
+      const results = Array.isArray(data) ? data : [];
+      setExercises(results);
+    } catch (err: any) {
+      const message = err.message ?? "Request failed";
+      console.error("[API error]", path, message);
+      setError(
+        message.startsWith("403:")
+          ? "Couldn't load exercises. Check your API subscription."
+          : "Couldn't load exercises. Pull to retry or check your connection."
+      );
+      setExercises([]);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
   };
 
   useEffect(() => {
@@ -76,94 +100,176 @@ const WorkoutList = ({ route }: any) => {
   const dispatch = useDispatch();
 
   function WorkoutRenderHandler(item: Exercise) {
+    const added = isExerciseInWorkout(item.id);
+
     return (
-      <View style={styles.screen}>
+      <RaisedCard style={styles.row}>
         <TouchableOpacity
+          style={styles.rowMain}
           onPress={() => {
-            nav.navigate("Display", {
+            nav.navigate("Display" as never, {
               id: item.id,
               name: item.name,
-            });
+            } as never);
           }}
         >
-          <View style={styles.workoutItem}>
-            <View style={styles.flexthing}>
-              <Text
-                numberOfLines={1}
-                style={{
-                  ...styles.name,
-                  color: !isExerciseFavorited(item.name)
-                    ? Colors.accent
-                    : Colors.primary,
-                }}
-              >
-                {item.name.length > 32
-                  ? item.name.slice(0, 32) + "..."
-                  : item.name}
-              </Text>
-              <Text style={styles.equipment}>{item.equipment}</Text>
-            </View>
+          <ExerciseGif
+            exerciseId={item.id}
+            resolution={180}
+            style={styles.thumb}
+          />
+          <View style={styles.textBlock}>
+            <Text numberOfLines={2} style={[styles.name, added && styles.nameAdded]}>
+              {item.name}
+            </Text>
+            <Text style={styles.equipment}>{item.equipment}</Text>
           </View>
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={{
-            ...NeomorphicStyles,
-            alignSelf: "center",
-            justifyContent: "center",
-            alignItems: "center",
-            padding: 8,
-          }}
+        <InsetButton
+          size={40}
           onPress={() => {
+            if (added) {
+              showToast("Already in your workout");
+              return;
+            }
             dispatch(
-              AddFavorite(item.id, item.name, item.gifUrl, item.equipment)
+              AddFavorite(
+                item.id,
+                item.name,
+                item.gifUrl,
+                item.equipment,
+                item.bodyPart
+              )
             );
+            showToast("Added to My Workout");
           }}
         >
-          <FontAwesomeIcon size={16} style={styles.icon} icon={faSquarePlus} />
-        </TouchableOpacity>
-      </View>
+          <Ionicons
+            name={added ? "checkmark" : "add"}
+            size={22}
+            color={Colors.accent}
+          />
+        </InsetButton>
+      </RaisedCard>
     );
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: Colors.twentyThree }}>
-      <ReturnedWorkoutList
-        data={exercises}
-        renderItem={({ item }: any) => WorkoutRenderHandler(item)}
-      />
+    <View style={styles.screen}>
+      {loading && (
+        <View style={styles.centered}>
+          <ActivityIndicator color={Colors.accent} size="large" />
+          <Text style={styles.statusText}>Loading exercises…</Text>
+        </View>
+      )}
+
+      {!loading && error && (
+        <View style={styles.centered}>
+          <RaisedCard style={styles.errorCard}>
+            <Ionicons name="cloud-offline-outline" size={32} color={Colors.textMuted} />
+            <Text style={styles.errorText}>{error}</Text>
+            <TouchableOpacity onPress={getWorkout}>
+              <Text style={styles.retryText}>Tap to retry</Text>
+            </TouchableOpacity>
+          </RaisedCard>
+        </View>
+      )}
+
+      {!loading && !error && exercises.length === 0 && (
+        <View style={styles.centered}>
+          <Text style={styles.statusText}>No exercises found. Try another search.</Text>
+        </View>
+      )}
+
+      {!loading && !error && exercises.length > 0 && (
+        <ReturnedWorkoutList
+          data={exercises}
+          extraData={favoritedExercises.length}
+          renderItem={({ item }: any) => WorkoutRenderHandler(item)}
+          refreshing={refreshing}
+          onRefresh={() => getWorkout(true)}
+          listBottomInset={WORKOUT_MINI_BAR_INSET}
+        />
+      )}
+      <ToastBanner message={toast} visible={toastVisible} />
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   screen: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 28,
-    justifyContent: "space-between",
-
+    flex: 1,
     backgroundColor: Colors.twentyThree,
   },
-  workoutItem: {
+  centered: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+  },
+  row: {
     flexDirection: "row",
-    padding: 11,
+    alignItems: "center",
+    marginHorizontal: 16,
+    marginVertical: 6,
+    padding: 10,
+    gap: 10,
+  },
+  rowMain: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    minWidth: 0,
+  },
+  thumb: {
+    width: 64,
+    height: 64,
+    borderRadius: 8,
+    overflow: "hidden",
+  },
+  textBlock: {
+    flex: 1,
+    minWidth: 0,
   },
   name: {
+    color: "#fff",
     textTransform: "capitalize",
-    fontSize: 16,
+    fontSize: 15,
+    fontWeight: "500",
   },
-
-  equipment: {
-    color: "white",
-    textTransform: "capitalize",
-    fontWeight: "200",
-  },
-  flexthing: {
-    flexDirection: "column",
-  },
-  icon: {
+  nameAdded: {
     color: Colors.accent,
+  },
+  equipment: {
+    color: Colors.textMuted,
+    textTransform: "capitalize",
+    fontSize: 12,
+    marginTop: 2,
+  },
+  statusText: {
+    color: Colors.textMuted,
+    textAlign: "center",
+    marginTop: 12,
+    fontSize: 15,
+  },
+  errorCard: {
+    padding: 24,
+    alignItems: "center",
+    gap: 12,
+    width: "100%",
+  },
+  errorText: {
+    color: Colors.textMuted,
+    textAlign: "center",
+    fontSize: 15,
+    lineHeight: 22,
+  },
+  retryText: {
+    color: Colors.accent,
+    fontSize: 15,
+    fontWeight: "600",
   },
 });
 

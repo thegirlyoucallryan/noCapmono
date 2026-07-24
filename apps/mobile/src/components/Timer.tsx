@@ -4,12 +4,11 @@ import { Ionicons } from "@expo/vector-icons";
 import { Audio } from "expo-av";
 
 import React, { useState, useEffect } from "react";
-import { Sound } from "expo-av/build/Audio";
 
 const Timer = ({ time, iconSize, initiateOnStart }: { time: number; iconSize?: number, initiateOnStart?:boolean }) => {
   const [seconds, setSeconds] = useState<number>(time);
   const [isActive, setIsActive] = useState<boolean>(false);
-  const [sound, setSound] = useState<Sound>();
+  const [sound, setSound] = useState<Audio.Sound>();
 
   useEffect(() => {
     const loadSound = async () => {

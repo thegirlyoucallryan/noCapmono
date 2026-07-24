@@ -2,6 +2,7 @@
   "expo": {
     "name": "No-Cap",
     "slug": "no-cap-fitness-app",
+    "scheme": "nocap",
     "version": "1.0.6",
     "orientation": "portrait",
     "icon": "./assets/noCapIcon.png",
@@ -15,17 +16,55 @@
     "ios": {
       "bundleIdentifier": "com.no.cap.fitness.app",
       "supportsTablet": true,
-      "buildNumber": "1.0.6",
-      "usesAppleSignIn": true
+      "buildNumber": "8",
+      "usesAppleSignIn": true,
+      "infoPlist": {
+        "NSMotionUsageDescription": "Allow No-Cap to count steps with the pedometer in Tools.",
+        "LSApplicationQueriesSchemes": [
+          "spotify"
+        ],
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "com.no.cap.fitness.app",
       "versionCode": 6,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptiveIcon.png"
-      }
+      },
+      "permissions": [
+        "android.permission.ACTIVITY_RECOGNITION",
+        "com.google.android.gms.permission.ACTIVITY_RECOGNITION"
+      ]
     },
-    "plugins": ["@react-native-google-signin/google-signin", "expo-apple-authentication", ["./android-manifest.plugin", "custom"]],
+    "plugins": [
+      "expo-apple-authentication",
+      "expo-font",
+      "expo-web-browser",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "extraPods": [
+              {
+                "name": "AppCheckCore",
+                "version": "11.2.0"
+              }
+            ]
+          }
+        }
+      ],
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.367662196638-9b1tk214mtjscshp14ljaljnaftfb5vs"
+        }
+      ],
+      [
+        "./android-manifest.plugin",
+        "custom"
+      ]
+    ],
     "web": {
       "favicon": "./assets/favicon.png"
     },
@@ -33,6 +72,9 @@
       "eas": {
         "projectId": "cbca7c36-f296-4094-a6ca-9ca7b8a16431"
       }
+    },
+    "experiments": {
+      "autolinkingModuleResolution": true
     }
   }
 }
