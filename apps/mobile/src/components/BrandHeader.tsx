@@ -57,9 +57,8 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   logo: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: "100%",
+    height: "100%",
   },
   textBlock: {
     flex: 1,
