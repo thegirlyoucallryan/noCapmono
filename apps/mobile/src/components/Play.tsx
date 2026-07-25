@@ -6,6 +6,7 @@ import { GradientCTA } from "./GradientCTA";
 import {
   requestPlayStart,
   setSessionSettings,
+  setWorkout,
 } from "../store/actions";
 
 const Play = ({
@@ -27,6 +28,7 @@ const Play = ({
         title="Start Workout"
         disabled={!canStart}
         onPress={() => {
+          dispatch(setWorkout(favorites));
           dispatch(setSessionSettings(sets, String(type)));
           dispatch(requestPlayStart());
           nav.navigate("Play");

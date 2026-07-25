@@ -35,6 +35,7 @@ create table if not exists public.workout_exercises (
   sort_order int not null default 0,
   target_sets int,
   target_reps int,
+  target_weight numeric,
   created_at timestamptz not null default now()
 );
 

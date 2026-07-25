@@ -224,10 +224,9 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   thumb: {
-    width: 64,
-    height: 64,
-    borderRadius: 8,
-    overflow: "hidden",
+    width: 56,
+    height: 56,
+    borderRadius: 10,
   },
   textBlock: {
     flex: 1,

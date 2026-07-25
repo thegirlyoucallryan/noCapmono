@@ -15,7 +15,14 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import Colors from "../constants/Colors";
 import Play from "../components/Play";
 import Message from "../components/Message";
-import { SubtractFavorite, clearFavorites, setWorkout, setSessionSettings } from "../store/actions";
+import {
+  SubtractFavorite,
+  clearFavorites,
+  setWorkout,
+  setSessionSettings,
+  setExerciseTarget,
+} from "../store/actions";
+import { TargetWeightChip } from "../components/TargetWeightChip";
 import SetSelector from "../components/SetsSelector";
 import WorkoutTypeDropdown from "../components/WorkoutTypeDropdown";
 import { Exercise, WorkoutType } from "../types/types";
@@ -189,7 +196,25 @@ class FavoritesScreen extends React.Component {
   //resets when user moves something in list
   reset = () => {
     this.active = false;
-    this.setState({ dragging: false, draggingIdx: -1 });
+    this.setState({ dragging: false, draggingIdx: -1 }, () => {
+      // Keep Redux queue in sync with drag order + targets for Play
+      this.props.setWorkout(
+        this.state.favorites,
+        this.props.loadedWorkoutName
+      );
+    });
+  };
+
+  handleTargetSave = (
+    exerciseId: string,
+    targetWeight: number | null,
+    targetReps: number | null
+  ) => {
+    const favorites = this.state.favorites.map((ex) =>
+      ex.id === exerciseId ? { ...ex, targetWeight, targetReps } : ex
+    );
+    this.setState({ favorites });
+    this.props.setExerciseTarget(exerciseId, targetWeight, targetReps);
   };
 
   // updating state so user can add more favorites to their list and have it rerender the flatlist
@@ -288,23 +313,35 @@ class FavoritesScreen extends React.Component {
           exerciseId={item.id}
           resolution={180}
           style={styles.thumb}
+          glow={false}
         />
 
-        <TouchableOpacity
-          style={styles.rowContent}
-          onPress={() => {
-            this.props.navigation.navigate("Details", {
-              id: item.id,
-              name: item.name});
-          }}
-        >
-          <Text numberOfLines={1} style={styles.name}>
-            {item.name}
-          </Text>
-          <Text numberOfLines={1} style={styles.equipment}>
-            {item.equipment}
-          </Text>
-        </TouchableOpacity>
+        <View style={styles.rowContent}>
+          <TouchableOpacity
+            onPress={() => {
+              this.props.navigation.navigate("Details", {
+                id: item.id,
+                name: item.name,
+              });
+            }}
+          >
+            <Text numberOfLines={1} style={styles.name}>
+              {item.name}
+            </Text>
+            <Text numberOfLines={1} style={styles.equipment}>
+              {item.equipment}
+            </Text>
+          </TouchableOpacity>
+          <TargetWeightChip
+            exerciseId={item.id}
+            exerciseName={item.name}
+            bodyPart={item.bodyPart}
+            equipment={item.equipment}
+            targetWeight={item.targetWeight}
+            targetReps={item.targetReps}
+            onSave={(w, r) => this.handleTargetSave(item.id, w, r)}
+          />
+        </View>
 
         <InsetButton
           size={36}
@@ -686,10 +723,10 @@ const styles = StyleSheet.create({
     width: 18,
     textAlign: "center"},
   thumb: {
-    width: 64,
-    height: 64,
-    borderRadius: 8,
-    overflow: "hidden"},
+    width: 52,
+    height: 52,
+    borderRadius: 10,
+  },
   rowContent: {
     flex: 1,
     minWidth: 0},
@@ -708,4 +745,6 @@ export default connect(mapStateToProps, {
   SubtractFavorite,
   clearFavorites,
   setWorkout,
-  setSessionSettings})(FavoritesScreen);
+  setSessionSettings,
+  setExerciseTarget,
+})(FavoritesScreen);

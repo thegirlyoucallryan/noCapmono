@@ -128,6 +128,8 @@ export function PlayListSession({
                     exerciseName={item.name}
                     bodyPart={item.bodyPart}
                     equipment={item.equipment}
+                    presetWeight={item.targetWeight}
+                    presetReps={item.targetReps}
                     onLogged={onLogged}
                   />
                 </View>
@@ -255,10 +257,9 @@ const styles = StyleSheet.create({
   },
   thumb: {
     alignSelf: "center",
-    width: SCREEN_WIDTH * 0.55,
-    height: SCREEN_WIDTH * 0.55,
-    borderRadius: 12,
-    overflow: "hidden",
+    width: SCREEN_WIDTH * 0.48,
+    height: SCREEN_WIDTH * 0.48,
+    borderRadius: 16,
   },
   footer: {
     borderTopWidth: 1,

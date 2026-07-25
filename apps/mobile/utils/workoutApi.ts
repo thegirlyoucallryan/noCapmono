@@ -23,6 +23,7 @@ export type SavedWorkoutExercise = {
   sort_order: number;
   target_sets: number | null;
   target_reps: number | null;
+  target_weight?: number | null;
 };
 
 export type ExerciseLog = {
@@ -259,11 +260,20 @@ export async function saveWorkout(
       body_part: ex.bodyPart ?? null,
       equipment: ex.equipment ?? null,
       sort_order: index,
+      target_reps: ex.targetReps ?? null,
+      target_weight: ex.targetWeight ?? null,
     }));
     const { error: exError } = await supabase
       .from("workout_exercises")
       .insert(rows);
-    if (exError) throw exError;
+    if (exError) {
+      // Older DBs may lack target_weight — retry without it.
+      const fallback = rows.map(({ target_weight: _tw, ...rest }) => rest);
+      const { error: retryError } = await supabase
+        .from("workout_exercises")
+        .insert(fallback);
+      if (retryError) throw retryError;
+    }
   }
 
   return workout;

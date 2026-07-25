@@ -134,6 +134,13 @@ export function SpotifyPlayer({ compact = false }: Props) {
       Alert.alert("Open Spotify", spotifyDeviceHint());
       return;
     }
+    if (msg === "PREMIUM_REQUIRED") {
+      Alert.alert(
+        "Spotify Premium",
+        "In-app play/pause/skip needs a Spotify Premium account."
+      );
+      return;
+    }
     Alert.alert("Spotify", "Something went wrong. Open Spotify and try again.");
   };
 
