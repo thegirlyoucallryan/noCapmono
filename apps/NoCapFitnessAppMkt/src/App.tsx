@@ -1,111 +1,132 @@
+import focusPlay from "./assets/focusPlay.png";
 import img from "./assets/heroImg1.jpg";
+import getReady from "./assets/getReady.png";
+import homescreen from "./assets/homescreen.png";
+import listview from "./assets/listview.png";
+import search from "./assets/search.png";
+import tools from "./assets/tools.png";
 import logo from "./assets/icon.png";
 import { TermsPage } from "./TermsPage";
 import { PrivacyPage } from "./PrivacyPage";
 import { ContactPage } from "./ContactPage";
+import "./App.css";
+
+const FEATURES = [
+  {
+    eyebrow: "Home",
+    title: "Your climb at a glance",
+    blurb:
+      "Pick up where you left off, jump into saved workouts, and watch your maxes stack — stats that actually mean something.",
+    src: homescreen,
+    alt: "No Cap home screen with saved workouts and lift maxes",
+  },
+  {
+    eyebrow: "Build",
+    title: "Make it yours",
+    blurb:
+      "Search 1300+ moves or filter by body part and equipment. Mix what you want — no cookie-cutter plans.",
+    src: search,
+    alt: "Workout builder with search, body parts, and equipment",
+  },
+  {
+    eyebrow: "Library",
+    title: "Add fast. Stay focused.",
+    blurb:
+      "Tap through exercises, check what belongs in the session, and keep building without losing your flow.",
+    src: listview,
+    alt: "Exercise list for band workouts with add controls",
+  },
+  {
+    eyebrow: "Ready",
+    title: "Lock in before you lift",
+    blurb:
+      "See what’s coming, set the vibe, and step into the session when you’re locked — not scrolling mid-set.",
+    src: getReady,
+    alt: "Get ready screen before starting a workout",
+  },
+  {
+    eyebrow: "Play",
+    title: "Focus mode that stays with you",
+    blurb:
+      "One exercise at a time, timer up, Spotify vibes on. Back, skip, next — run the whole workout without leaving the flow.",
+    src: focusPlay,
+    alt: "Focus play mode showing current exercise and timer",
+  },
+  {
+    eyebrow: "Tools",
+    title: "Estimate. Step. Progress.",
+    blurb:
+      "Punch in a working set for a smart 1RM read, track steps, and keep the little edges that compound.",
+    src: tools,
+    alt: "Tools screen with 1RM estimator and step counter",
+  },
+] as const;
 
 function HomePage() {
   return (
-    <div
-      style={{
-        background: "black",
-        display: "flex",
-        flexDirection: "column",
-        minHeight: "100vh",
-      }}
-    >
-      <div
-        style={{
-          height: "90vh",
-          width: "60vw",
-          marginLeft: "30%",
-          overflowX: "clip",
-          background: `url(${img})`,
-          backgroundRepeat: "no-repeat",
-          backgroundSize: "cover",
-          position: "relative",
-        }}
-      >
+    <div className="page">
+      <section className="hero">
         <div
-          style={{
-            width: "100%",
-            background: "rgba(29, 29, 29, 0.25)",
-          }}
-        ></div>
-      </div>
-      <div
-        style={{
-          textAlign: "left",
-          position: "absolute",
-          left: 100,
-          top: 200,
-          display: "flex",
-          flexDirection: "column",
-        }}
-      >
-        <h1 style={{ color: "white", fontSize: "4rem" }}>Keep your workout</h1>
-        <h1 style={{ color: "#98F2E7", fontSize: "8rem" }}>Revolutionary</h1>
-        <p style={{ color: "whitesmoke", fontSize: "1.8rem", margin: 8 }}>
-          Your fitness goals, your way -- Tailor your fitness routine with ease,
-          selecting from a vast array of 1300+ exercises
-        </p>
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "row",
-            alignItems: "center",
-            marginBottom: 10,
-          }}
-        >
-          <img src={logo} style={{ height: "20%", width: "20%" }} alt="Logo" />
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              padding: 80,
-            }}
-          >
-            <button
-              title="Download"
-              style={{
-                padding: 18,
-                paddingInline: 40,
-                borderRadius: 40,
-                border: "none",
-                color: "#191919",
-                fontSize: "1.3rem",
-                backgroundColor: "whitesmoke",
-              }}
-            >
+          className="hero__bg"
+          style={{ backgroundImage: `url(${img})` }}
+          aria-hidden
+        />
+        <div className="hero__veil" aria-hidden />
+        <div className="hero__content">
+          <div className="hero__brand">
+            <img className="hero__logo" src={logo} alt="No Cap Gym App" />
+            <span className="hero__brand-name">No Cap</span>
+          </div>
+          <p className="hero__kicker">Gym app</p>
+          <h1 className="hero__title">
+            Keep your workout
+            <span>Revolutionary</span>
+          </h1>
+          <p className="hero__sub">
+            Your goals, your way — build from 1300+ exercises, play the session,
+            stack the stats.
+          </p>
+          <div className="hero__cta-row">
+            <button type="button" className="hero__btn" title="Download">
               Download
             </button>
-            <p style={{ color: "white", margin: 15, fontSize: "1.3rem" }}>
-              Available on iOS and Android
-            </p>
+            <p className="hero__platforms">Available on iOS and Android</p>
           </div>
         </div>
-      </div>
+      </section>
 
-      <footer
-        style={{
-          background: "black",
-          color: "white",
-          display: "flex",
-          justifyContent: "space-around",
-          padding: "20px",
-          flexWrap: "wrap",
-          gap: 16,
-        }}
-      >
-        <a href="/terms" style={{ color: "#98F2E7", textDecoration: "none" }}>
-          Terms & Conditions
-        </a>
-        <a href="/privacy" style={{ color: "#98F2E7", textDecoration: "none" }}>
-          Privacy Policy
-        </a>
-        <a href="/contact" style={{ color: "#98F2E7", textDecoration: "none" }}>
-          Contact Us
-        </a>
+      <section className="features">
+        <div className="features__intro">
+          <h2>Built for how you train</h2>
+          <p>
+            From the first build to the last set — every screen is made to stay
+            out of your way and keep you moving.
+          </p>
+        </div>
+
+        {FEATURES.map((f, i) => (
+          <article
+            key={f.title}
+            className={`feature${i % 2 === 1 ? " feature--flip" : ""}`}
+          >
+            <div className="feature__copy">
+              <p className="feature__eyebrow">{f.eyebrow}</p>
+              <h3 className="feature__title">{f.title}</h3>
+              <p className="feature__blurb">{f.blurb}</p>
+            </div>
+            <div className="feature__visual">
+              <div className="phone">
+                <img src={f.src} alt={f.alt} />
+              </div>
+            </div>
+          </article>
+        ))}
+      </section>
+
+      <footer className="site-footer">
+        <a href="/terms">Terms & Conditions</a>
+        <a href="/privacy">Privacy Policy</a>
+        <a href="/contact">Contact Us</a>
       </footer>
     </div>
   );
