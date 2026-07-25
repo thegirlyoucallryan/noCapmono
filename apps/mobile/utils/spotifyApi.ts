@@ -141,34 +141,101 @@ async function playbackCommand(
     if (res.status === 404) {
       throw new Error("NO_ACTIVE_DEVICE");
     }
+    if (res.status === 403) {
+      throw new Error("PREMIUM_REQUIRED");
+    }
     return false;
   } catch (e: any) {
-    if (e?.message === "NOT_CONNECTED") throw e;
-    if (e?.message === "NO_ACTIVE_DEVICE") throw e;
+    if (
+      e?.message === "NOT_CONNECTED" ||
+      e?.message === "NO_ACTIVE_DEVICE" ||
+      e?.message === "PREMIUM_REQUIRED"
+    ) {
+      throw e;
+    }
     return false;
   }
 }
 
+type SpotifyDevice = {
+  id: string;
+  is_active: boolean;
+  name: string;
+  type: string;
+};
+
+async function listDevices(): Promise<SpotifyDevice[]> {
+  try {
+    const res = await spotifyFetch("/me/player/devices");
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data?.devices ?? []).filter((d: SpotifyDevice) => d?.id);
+  } catch {
+    return [];
+  }
+}
+
+/** Spotify must have a device in its player list — open alone isn't enough. */
+async function ensurePlaybackDevice(): Promise<string | null> {
+  const devices = await listDevices();
+  if (!devices.length) return null;
+
+  const active = devices.find((d) => d.is_active);
+  if (active) return active.id;
+
+  // Prefer phone, then any available device
+  const preferred =
+    devices.find((d) => /smartphone|tablet/i.test(d.type)) ?? devices[0];
+
+  const transfer = await spotifyFetch("/me/player", {
+    method: "PUT",
+    body: JSON.stringify({
+      device_ids: [preferred.id],
+      play: false,
+    }),
+  });
+
+  // 204 = transferred; 404 = still no player — caller should surface hint
+  if (transfer.status === 204 || transfer.ok) {
+    await new Promise((r) => setTimeout(r, 400));
+    return preferred.id;
+  }
+  return preferred.id;
+}
+
 export async function playPlaylist(playlistId: string): Promise<boolean> {
-  return playbackCommand("/me/player/play", "PUT", {
+  const deviceId = await ensurePlaybackDevice();
+  if (!deviceId) throw new Error("NO_ACTIVE_DEVICE");
+
+  const qs = `?device_id=${encodeURIComponent(deviceId)}`;
+  return playbackCommand(`/me/player/play${qs}`, "PUT", {
     context_uri: `spotify:playlist:${playlistId}`,
   });
 }
 
 export async function pausePlayback(): Promise<boolean> {
-  return playbackCommand("/me/player/pause", "PUT");
+  const deviceId = await ensurePlaybackDevice();
+  const qs = deviceId ? `?device_id=${encodeURIComponent(deviceId)}` : "";
+  return playbackCommand(`/me/player/pause${qs}`, "PUT");
 }
 
 export async function resumePlayback(): Promise<boolean> {
-  return playbackCommand("/me/player/play", "PUT");
+  const deviceId = await ensurePlaybackDevice();
+  if (!deviceId) throw new Error("NO_ACTIVE_DEVICE");
+  const qs = `?device_id=${encodeURIComponent(deviceId)}`;
+  return playbackCommand(`/me/player/play${qs}`, "PUT");
 }
 
 export async function skipNext(): Promise<boolean> {
-  return playbackCommand("/me/player/next", "POST");
+  const deviceId = await ensurePlaybackDevice();
+  const qs = deviceId ? `?device_id=${encodeURIComponent(deviceId)}` : "";
+  return playbackCommand(`/me/player/next${qs}`, "POST");
 }
 
 export async function skipPrevious(): Promise<boolean> {
-  return playbackCommand("/me/player/previous", "POST");
+  const deviceId = await ensurePlaybackDevice();
+  const qs = deviceId ? `?device_id=${encodeURIComponent(deviceId)}` : "";
+  return playbackCommand(`/me/player/previous${qs}`, "POST");
 }
 
 export async function getNowPlaying(): Promise<SpotifyTrack | null> {
@@ -192,5 +259,6 @@ export async function getNowPlaying(): Promise<SpotifyTrack | null> {
 }
 
 export function spotifyDeviceHint(): string {
-  return "Open the Spotify app once so No-Cap can steer playback — then controls work here without switching apps.";
+  return "In Spotify, tap Play on any song once (Premium required), then come back and try again — Spotify must register this phone as a player.";
 }
+

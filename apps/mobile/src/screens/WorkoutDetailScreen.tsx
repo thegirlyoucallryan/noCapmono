@@ -81,9 +81,11 @@ const styles = StyleSheet.create({
   },
 
   image: {
-    marginTop: 15,
-    width: SCREEN_WIDTH,
-    height: SCREEN_WIDTH * 0.78,
+    marginTop: 12,
+    alignSelf: "center",
+    width: SCREEN_WIDTH * 0.9,
+    height: SCREEN_WIDTH * 0.9,
+    borderRadius: 22,
   },
 
   timerContainer: {

@@ -151,8 +151,9 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   image: {
-    width: SCREEN_WIDTH * 0.82,
-    height: SCREEN_WIDTH * 0.82,
+    width: SCREEN_WIDTH * 0.9,
+    height: SCREEN_WIDTH * 0.9,
+    borderRadius: 22,
   },
   infoCard: {
     padding: 18,

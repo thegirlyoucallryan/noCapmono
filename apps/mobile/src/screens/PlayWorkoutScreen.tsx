@@ -378,14 +378,14 @@ const PlayWorkoutScreen = ({ route }: any) => {
                 </View>
               </View>
               <View style={styles.card}>
-                <Text style={styles.name}>
-                  {current.name.replace(/\(Male\)/i, "")}
-                </Text>
                 <ExerciseGif
                   key={current.id}
                   exerciseId={current.id}
                   style={styles.imageFrame}
                 />
+                <Text style={styles.name}>
+                  {current.name.replace(/\(Male\)/i, "")}
+                </Text>
               </View>
 
               <View style={styles.controlsDock}>
@@ -395,6 +395,8 @@ const PlayWorkoutScreen = ({ route }: any) => {
                   exerciseName={current.name}
                   bodyPart={current.bodyPart}
                   equipment={current.equipment}
+                  presetWeight={(current as any).targetWeight}
+                  presetReps={(current as any).targetReps}
                   onLogged={(vol) => setSessionVolume((v) => v + vol)}
                 />
                 <SpotifyVibePicker compact />
@@ -637,30 +639,33 @@ const styles = StyleSheet.create({
     alignSelf: "center",
     marginHorizontal: 5,
     marginBottom: 4,
-    maxHeight: SCREEN_WIDTH * 0.92,
+    maxHeight: SCREEN_WIDTH * 1.05,
     ...Theme.raised,
     borderRadius: Theme.radius.lg,
-  
     backgroundColor: Colors.glowCyanDim,
     borderBottomColor: Colors.glowPurple,
     borderRightColor: Colors.glowCyan,
     ...Theme.glow.cyan,
     overflow: "visible",
+    justifyContent: "center",
+    paddingVertical: 8,
   },
   imageFrame: {
     alignSelf: "center",
-    width: SCREEN_WIDTH * 0.78,
-    height: SCREEN_WIDTH * 0.78,
-    borderRadius: 12,
-    overflow: "hidden",
-    marginBottom: 12,
+    width: SCREEN_WIDTH * 0.9,
+    height: SCREEN_WIDTH * 0.9,
+    borderRadius: 22,
+    marginBottom: 10,
+    marginTop: 4,
   },
   name: {
     color: Colors.glowCyan,
-    padding: 12,
-    fontSize: 17,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    fontSize: 16,
     textTransform: "capitalize",
     fontWeight: "600",
+    textAlign: "center",
   },
   timerBox: {
     ...Theme.inset,

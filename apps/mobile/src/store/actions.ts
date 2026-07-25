@@ -7,6 +7,7 @@ export const SET_WORKOUT = "SET_WORKOUT";
 export const SET_SESSION_SETTINGS = "SET_SESSION_SETTINGS";
 export const REQUEST_PLAY_START = "REQUEST_PLAY_START";
 export const CLEAR_PLAY_START = "CLEAR_PLAY_START";
+export const SET_EXERCISE_TARGET = "SET_EXERCISE_TARGET";
 
 export const AddFavorite = (
   id: any,
@@ -71,6 +72,8 @@ export const setWorkout = (
     gifUrl?: string;
     equipment?: string;
     bodyPart?: string;
+    targetWeight?: number | null;
+    targetReps?: number | null;
   }[],
   workoutName?: string | null
 ) => {
@@ -85,6 +88,18 @@ export const setSessionSettings = (sets: number, type: string) => ({
   type: SET_SESSION_SETTINGS,
   sets,
   workoutType: type,
+});
+
+/** Planned weight/reps for one exercise in the current My Workout queue */
+export const setExerciseTarget = (
+  exerciseId: string,
+  targetWeight: number | null,
+  targetReps: number | null
+) => ({
+  type: SET_EXERCISE_TARGET,
+  exerciseId,
+  targetWeight,
+  targetReps,
 });
 
 /** Tell Play tab to kick off Get Ready */

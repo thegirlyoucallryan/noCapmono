@@ -7,7 +7,8 @@ module.exports = {
   ...appJson.expo,
   extra: {
     ...appJson.expo.extra,
-    apiKey: process.env.EXPO_PUBLIC_API_KEY,
+    // apiKey: process.env.EXPO_PUBLIC_API_KEY, // ExerciseDB / RapidAPI (legacy)
+    workoutxApiKey: process.env.EXPO_PUBLIC_WORKOUTX_API_KEY,
     supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL,
     supabaseKey: process.env.EXPO_PUBLIC_SUPABASE_KEY,
     spotifyClientId: process.env.EXPO_PUBLIC_SPOTIFY_CLIENT_ID,

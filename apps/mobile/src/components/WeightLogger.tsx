@@ -23,6 +23,10 @@ type Props = {
   exerciseName: string;
   bodyPart?: string | null;
   equipment?: string | null;
+  /** Planned weight from My Workout setup */
+  presetWeight?: number | null;
+  /** Planned reps from My Workout setup */
+  presetReps?: number | null;
   onLogged?: (volume: number) => void;
 };
 
@@ -35,6 +39,8 @@ export function WeightLogger({
   exerciseName,
   bodyPart,
   equipment,
+  presetWeight,
+  presetReps,
   onLogged,
 }: Props) {
   const [expanded, setExpanded] = useState(false);
@@ -56,6 +62,8 @@ export function WeightLogger({
       try {
         const lastLog = await getLastLift(exerciseId);
         if (!alive) return;
+        const hasPreset =
+          presetWeight != null && !Number.isNaN(Number(presetWeight));
         if (lastLog?.weight != null) {
           const w = Number(lastLog.weight);
           const r = lastLog.reps != null ? Number(lastLog.reps) : null;
@@ -63,14 +71,34 @@ export function WeightLogger({
           setLastWeight(w);
           setLastReps(r);
           setSuggestion(next > w ? next : null);
-          setWeight(String(next > w ? next : w));
-          setReps(r != null ? String(r) : "");
+          if (hasPreset) {
+            setWeight(String(presetWeight));
+            setReps(
+              presetReps != null && !Number.isNaN(Number(presetReps))
+                ? String(presetReps)
+                : r != null
+                  ? String(r)
+                  : ""
+            );
+          } else {
+            setWeight(String(next > w ? next : w));
+            setReps(r != null ? String(r) : "");
+          }
         } else {
           setLastWeight(null);
           setLastReps(null);
           setSuggestion(null);
-          setWeight("");
-          setReps("");
+          if (hasPreset) {
+            setWeight(String(presetWeight));
+            setReps(
+              presetReps != null && !Number.isNaN(Number(presetReps))
+                ? String(presetReps)
+                : ""
+            );
+          } else {
+            setWeight("");
+            setReps("");
+          }
         }
       } catch {
         if (alive) {
@@ -83,7 +111,7 @@ export function WeightLogger({
     return () => {
       alive = false;
     };
-  }, [exerciseId]);
+  }, [exerciseId, presetWeight, presetReps]);
 
   const delta =
     suggestion != null && lastWeight != null

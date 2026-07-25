@@ -9,6 +9,7 @@ import {
   SET_SESSION_SETTINGS,
   REQUEST_PLAY_START,
   CLEAR_PLAY_START,
+  SET_EXERCISE_TARGET,
 } from "./actions";
 
 const initialState = {
@@ -59,7 +60,10 @@ const workOutReducer = (state = initialState, action) => {
             ex.name,
             ex.gifUrl || "",
             ex.equipment || "",
-            ex.bodyPart || ""
+            ex.bodyPart || "",
+            ex.sets ?? 4,
+            ex.targetWeight ?? null,
+            ex.targetReps ?? null
           )
       );
       return {
@@ -70,6 +74,25 @@ const workOutReducer = (state = initialState, action) => {
             ? String(action.workoutName).trim()
             : null,
       };
+    }
+    case SET_EXERCISE_TARGET: {
+      const idx = state.favoritedExercises.findIndex(
+        (fav) => fav.id === action.exerciseId
+      );
+      if (idx < 0) return state;
+      const next = [...state.favoritedExercises];
+      const cur = next[idx];
+      next[idx] = new Exercise(
+        cur.id,
+        cur.name,
+        cur.gifUrl,
+        cur.equipment,
+        cur.bodyPart,
+        cur.sets,
+        action.targetWeight,
+        action.targetReps
+      );
+      return { ...state, favoritedExercises: next };
     }
     case SET_SESSION_SETTINGS:
       return {

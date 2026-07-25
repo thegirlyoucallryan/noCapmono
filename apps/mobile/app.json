@@ -17,7 +17,7 @@
     "ios": {
       "bundleIdentifier": "com.no.cap.fitness.app",
       "supportsTablet": true,
-      "buildNumber": "8",
+      "buildNumber": "17",
       "usesAppleSignIn": true,
       "infoPlist": {
         "NSMotionUsageDescription": "Allow No-Cap to count steps with the pedometer in Tools.",
@@ -29,7 +29,7 @@
     },
     "android": {
       "package": "com.no.cap.fitness.app",
-      "versionCode": 6,
+      "versionCode": 8,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptiveIcon.png"
       },

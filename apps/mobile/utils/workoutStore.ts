@@ -30,6 +30,8 @@ type LocalWorkout = {
     body_part: string | null;
     equipment: string | null;
     sort_order: number;
+    target_weight?: number | null;
+    target_reps?: number | null;
   }[];
 };
 
@@ -117,6 +119,8 @@ export async function saveNamedWorkout(
       body_part: ex.bodyPart ?? null,
       equipment: ex.equipment ?? null,
       sort_order: index,
+      target_weight: ex.targetWeight ?? null,
+      target_reps: ex.targetReps ?? null,
     })),
   };
 
@@ -179,6 +183,8 @@ export async function loadSavedWorkoutExercises(
           equipment: ex.equipment ?? "",
           gifUrl: "",
           target: "",
+          targetWeight: (ex as any).target_weight ?? null,
+          targetReps: ex.target_reps ?? null,
         }));
       }
     } catch (e) {
@@ -199,6 +205,8 @@ export async function loadSavedWorkoutExercises(
       equipment: ex.equipment ?? "",
       gifUrl: "",
       target: "",
+      targetWeight: ex.target_weight ?? null,
+      targetReps: ex.target_reps ?? null,
     }));
 }
 
