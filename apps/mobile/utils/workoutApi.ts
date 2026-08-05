@@ -279,6 +279,60 @@ export async function saveWorkout(
   return workout;
 }
 
+export async function updateWorkout(
+  workoutId: string,
+  name: string,
+  exercises: Exercise[]
+): Promise<SavedWorkout> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not signed in");
+
+  const trimmed = name.trim();
+  if (!trimmed) throw new Error("Name required");
+
+  const { data: workout, error } = await supabase
+    .from("workouts")
+    .update({ name: trimmed, updated_at: new Date().toISOString() })
+    .eq("id", workoutId)
+    .eq("user_id", user.id)
+    .select("*")
+    .single();
+  if (error) throw error;
+
+  const { error: delError } = await supabase
+    .from("workout_exercises")
+    .delete()
+    .eq("workout_id", workoutId);
+  if (delError) throw delError;
+
+  if (exercises.length) {
+    const rows = exercises.map((ex, index) => ({
+      workout_id: workoutId,
+      exercise_id: ex.id,
+      exercise_name: ex.name,
+      body_part: ex.bodyPart ?? null,
+      equipment: ex.equipment ?? null,
+      sort_order: index,
+      target_reps: ex.targetReps ?? null,
+      target_weight: ex.targetWeight ?? null,
+    }));
+    const { error: exError } = await supabase
+      .from("workout_exercises")
+      .insert(rows);
+    if (exError) {
+      const fallback = rows.map(({ target_weight: _tw, ...rest }) => rest);
+      const { error: retryError } = await supabase
+        .from("workout_exercises")
+        .insert(fallback);
+      if (retryError) throw retryError;
+    }
+  }
+
+  return workout;
+}
+
 export async function deleteWorkout(workoutId: string) {
   const { error } = await supabase.from("workouts").delete().eq("id", workoutId);
   if (error) throw error;
@@ -341,4 +395,18 @@ export async function getMaxWeight(
     .maybeSingle();
   if (error) throw error;
   return data?.weight ?? null;
+}
+
+/** Recent weighted logs for Home maxes (RLS scopes to current user). */
+export async function listWeightedLogs(
+  limit = 300
+): Promise<ExerciseLog[]> {
+  const { data, error } = await supabase
+    .from("exercise_logs")
+    .select("*")
+    .not("weight", "is", null)
+    .order("performed_at", { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return (data ?? []) as ExerciseLog[];
 }

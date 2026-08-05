@@ -18,6 +18,7 @@ const initialState = {
   workoutType: "Circuit" as string,
   pendingPlayStart: false,
   loadedWorkoutName: null as string | null,
+  loadedWorkoutId: null as string | null,
 };
 
 const workOutReducer = (state = initialState, action) => {
@@ -66,14 +67,17 @@ const workOutReducer = (state = initialState, action) => {
             ex.targetReps ?? null
           )
       );
-      return {
+      const next: typeof state = {
         ...state,
         favoritedExercises: list,
-        loadedWorkoutName:
-          action.workoutName != null && String(action.workoutName).trim()
-            ? String(action.workoutName).trim()
-            : null,
       };
+      if ("workoutName" in action) {
+        next.loadedWorkoutName = action.workoutName ?? null;
+      }
+      if ("workoutId" in action) {
+        next.loadedWorkoutId = action.workoutId ?? null;
+      }
+      return next;
     }
     case SET_EXERCISE_TARGET: {
       const idx = state.favoritedExercises.findIndex(
@@ -132,6 +136,7 @@ const workOutReducer = (state = initialState, action) => {
         ...state,
         favoritedExercises: [],
         loadedWorkoutName: null,
+        loadedWorkoutId: null,
       };
 
     default:

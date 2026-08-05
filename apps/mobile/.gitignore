@@ -32,6 +32,9 @@ yarn-error.*
 .env*.local
 .env
 
+# Sentry — contains auth tokens; use SENTRY_AUTH_TOKEN env / EAS secret instead
+**/sentry.properties
+
 # typescript
 *.tsbuildinfo
 
@@ -75,3 +78,4 @@ yarn-error.*
 *.tsbuildinfo
 
 # @end expo-cli
+.env.local

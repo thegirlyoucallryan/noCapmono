@@ -28,6 +28,7 @@ import WorkoutTypeDropdown from "../components/WorkoutTypeDropdown";
 import { Exercise, WorkoutType } from "../types/types";
 import { Ionicons } from "@expo/vector-icons";
 import { ToolTip } from "../components/ToolTip";
+import { isCompactLayout } from "../constants/layout";
 import { DISPLAY_FONT } from "../constants/Typography";
 import { RaisedCard } from "../components/RaisedCard";
 import { InsetButton } from "../components/InsetButton";
@@ -39,13 +40,16 @@ import {
   listSavedWorkouts,
   loadSavedWorkoutExercises,
   removeSavedWorkout,
-  saveNamedWorkout} from "../../utils/workoutStore";
+  saveNamedWorkout,
+  updateNamedWorkout,
+} from "../../utils/workoutStore";
 import type { SavedWorkout } from "../../utils/workoutApi";
 
 const mapStateToProps = (state) => {
   return {
     favorites: state.favorites.favoritedExercises,
     loadedWorkoutName: state.favorites.loadedWorkoutName as string | null,
+    loadedWorkoutId: state.favorites.loadedWorkoutId as string | null,
   };
 };
 
@@ -80,7 +84,9 @@ class FavoritesScreen extends React.Component {
     showToolTip: false,
     showSaveModal: false,
     showLoadModal: false,
-    savedWorkouts: [] as SavedWorkout[]};
+    savedWorkouts: [] as SavedWorkout[],
+    editingExercise: null as Exercise | null,
+  };
 
   point = new Animated.ValueXY();
   currentY = 0;
@@ -200,7 +206,8 @@ class FavoritesScreen extends React.Component {
       // Keep Redux queue in sync with drag order + targets for Play
       this.props.setWorkout(
         this.state.favorites,
-        this.props.loadedWorkoutName
+        this.props.loadedWorkoutName,
+        this.props.loadedWorkoutId
       );
     });
   };
@@ -253,9 +260,17 @@ class FavoritesScreen extends React.Component {
   };
 
   handleSaveWorkout = async (name: string) => {
-    await saveNamedWorkout(name, this.state.favorites);
+    const id = this.props.loadedWorkoutId;
+    if (id) {
+      await updateNamedWorkout(id, name, this.state.favorites);
+      await this.refreshSaved();
+      this.props.setWorkout(this.state.favorites, name, id);
+      Alert.alert("Updated", `"${name}" was updated.`);
+      return;
+    }
+    const result = await saveNamedWorkout(name, this.state.favorites);
     await this.refreshSaved();
-    this.props.setWorkout(this.state.favorites, name);
+    this.props.setWorkout(this.state.favorites, name, result.id);
     Alert.alert("Saved", `"${name}" is ready to load anytime.`);
   };
 
@@ -265,21 +280,16 @@ class FavoritesScreen extends React.Component {
       Alert.alert("Empty", "That workout has no exercises.");
       return;
     }
-    this.props.setWorkout(exercises, workout.name);
+    this.props.setWorkout(exercises, workout.name, workout.id);
     Alert.alert("Loaded", `"${workout.name}" is in My Workout.`);
   };
 
-  handleDeleteSaved = (workout: SavedWorkout) => {
-    Alert.alert("Delete saved workout", `Remove "${workout.name}"?`, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: async () => {
-          await removeSavedWorkout(workout.id);
-          await this.refreshSaved();
-        }},
-    ]);
+  handleDeleteSaved = async (workout: SavedWorkout) => {
+    await removeSavedWorkout(workout.id);
+    if (this.props.loadedWorkoutId === workout.id) {
+      this.props.clearFavorites();
+    }
+    await this.refreshSaved();
   };
 
   openLoadModal = async () => {
@@ -288,76 +298,97 @@ class FavoritesScreen extends React.Component {
   };
 
   render() {
-    const { favorites, dragging, draggingIdx } = this.state;
+    const { favorites, dragging, draggingIdx, editingExercise } = this.state;
+    const compact = isCompactLayout();
+    const thumb = compact ? 44 : 70;
+    const removeSize = compact ? 30 : 36;
 
-    const renderItem = ({ item, index }, noPanResponder = false) => (
-      <RaisedCard
-        onLayout={(e) => {
-          this.rowHeight = e.nativeEvent.layout.height;
-        }}
-        style={[
-          styles.row,
-          draggingIdx === index && styles.rowDragging,
-        ]}
-      >
-        <View
-          {...(noPanResponder ? {} : this._panResponder.panHandlers)}
-          style={styles.dragHandle}
+    const renderItem = ({ item, index }, noPanResponder = false) => {
+      const targetLabel =
+        item.targetWeight != null
+          ? `${item.targetWeight}${
+              item.targetReps != null ? `×${item.targetReps}` : " lb"
+            }`
+          : null;
+
+      return (
+        <RaisedCard
+          onLayout={(e) => {
+            this.rowHeight = e.nativeEvent.layout.height;
+          }}
+          style={[
+            styles.row,
+            compact && styles.rowCompact,
+            draggingIdx === index && styles.rowDragging,
+          ]}
         >
-          <Ionicons name="reorder-three" size={22} color={Colors.textMuted} />
-        </View>
-
-        <Text style={styles.index}>{index + 1}</Text>
-
-        <ExerciseGif
-          exerciseId={item.id}
-          resolution={180}
-          style={styles.thumb}
-          glow={false}
-        />
-
-        <View style={styles.rowContent}>
-          <TouchableOpacity
-            onPress={() => {
-              this.props.navigation.navigate("Details", {
-                id: item.id,
-                name: item.name,
-              });
-            }}
+          <View
+            {...(noPanResponder ? {} : this._panResponder.panHandlers)}
+            style={[styles.dragHandle, compact && styles.dragHandleCompact]}
           >
-            <Text numberOfLines={1} style={styles.name}>
+            <Ionicons
+              name="reorder-three"
+              size={compact ? 20 : 22}
+              color={Colors.textMuted}
+            />
+          </View>
+
+          <Text style={[styles.index, compact && styles.indexCompact]}>
+            {index + 1}
+          </Text>
+
+          <ExerciseGif
+            exerciseId={item.id}
+            resolution={180}
+            style={{
+              width: thumb,
+              height: thumb,
+              borderRadius: compact ? 8 : 12,
+            }}
+            glow={false}
+          />
+
+          <TouchableOpacity
+            style={styles.rowContent}
+            activeOpacity={0.7}
+            onPress={() => this.setState({ editingExercise: item })}
+          >
+            <Text
+              numberOfLines={1}
+              style={[styles.name, compact && styles.nameCompact]}
+            >
               {item.name}
             </Text>
-            <Text numberOfLines={1} style={styles.equipment}>
+            <Text
+              numberOfLines={1}
+              style={[styles.equipment, compact && styles.equipmentCompact]}
+            >
               {item.equipment}
+              {targetLabel ? ` · ${targetLabel}` : ""}
             </Text>
+            <Text style={styles.editHint}>Tap to edit target</Text>
           </TouchableOpacity>
-          <TargetWeightChip
-            exerciseId={item.id}
-            exerciseName={item.name}
-            bodyPart={item.bodyPart}
-            equipment={item.equipment}
-            targetWeight={item.targetWeight}
-            targetReps={item.targetReps}
-            onSave={(w, r) => this.handleTargetSave(item.id, w, r)}
-          />
-        </View>
 
-        <InsetButton
-          size={36}
-          onPress={() => {
-            this.props.SubtractFavorite(
-              item.id,
-              item.name,
-              item.gifUrl,
-              item.equipment
-            );
-          }}
-        >
-          <Ionicons name="remove" size={20} color={Colors.accent4} />
-        </InsetButton>
-      </RaisedCard>
-    );
+          <InsetButton
+            size={removeSize}
+            onPress={() => {
+              this.props.SubtractFavorite(
+                item.id,
+                item.name,
+                item.gifUrl,
+                item.equipment
+              );
+            }}
+          >
+            <Ionicons
+              name="remove"
+              size={compact ? 16 : 20}
+              color={Colors.accent4}
+            />
+          </InsetButton>
+        </RaisedCard>
+      );
+    };
 
     return (
       <SafeAreaView style={styles.screen} edges={["top"]}>
@@ -381,33 +412,30 @@ class FavoritesScreen extends React.Component {
                 !!this.props.loadedWorkoutName && styles.loadHeaderBtnActive,
               ]}
               hitSlop={6}
+              accessibilityLabel={
+                this.props.loadedWorkoutName
+                  ? `Loaded: ${this.props.loadedWorkoutName}`
+                  : "Load saved workout"
+              }
             >
               <Ionicons
                 name="folder-open-outline"
-                size={18}
+                size={20}
                 color={
                   this.props.loadedWorkoutName
                     ? Colors.glowCyan
                     : Colors.accent
                 }
               />
-              <Text
-                style={[
-                  styles.loadHeaderText,
-                  !!this.props.loadedWorkoutName && styles.loadHeaderTextActive,
-                ]}
-                numberOfLines={1}
-              >
-                {this.props.loadedWorkoutName
-                  ? this.props.loadedWorkoutName
-                  : "Load"}
-              </Text>
+              {this.props.loadedWorkoutName ? (
+                <Text
+                  style={[styles.loadHeaderText, styles.loadHeaderTextActive]}
+                  numberOfLines={1}
+                >
+                  {this.props.loadedWorkoutName}
+                </Text>
+              ) : null}
             </Pressable>
-            {favorites.length > 0 && (
-              <View style={styles.countBadge}>
-                <Text style={styles.countText}>{favorites.length}</Text>
-              </View>
-            )}
           </View>
         </View>
 
@@ -491,19 +519,13 @@ class FavoritesScreen extends React.Component {
               keyExtractor={(item) => String(item.id)}
             />
 
-            <View style={styles.actionStack}>
+            <View
+              style={[
+                styles.actionStack,
+                compact && styles.actionStackCompact,
+              ]}
+            >
               <View style={styles.secondaryActions}>
-                <Pressable
-                  onPress={() => this.setState({ showSaveModal: true })}
-                  style={({ pressed }) => [
-                    styles.chipBtn,
-                    styles.saveChip,
-                    pressed && styles.chipPressed,
-                  ]}
-                >
-                  <Ionicons name="bookmark" size={16} color={Colors.twentyThree} />
-                  <Text style={styles.saveChipText}>Save</Text>
-                </Pressable>
                 <Pressable
                   onPress={() => {
                     Alert.alert(
@@ -521,21 +543,53 @@ class FavoritesScreen extends React.Component {
                   style={({ pressed }) => [
                     styles.chipBtn,
                     styles.clearChip,
+                    compact && styles.chipBtnCompact,
                     pressed && styles.chipPressed,
                   ]}
                 >
                   <Ionicons
                     name="trash-outline"
-                    size={16}
+                    size={compact ? 14 : 16}
                     color={Colors.accent4}
                   />
-                  <Text style={styles.clearChipText}>Clear</Text>
+                  <Text
+                    style={[
+                      styles.clearChipText,
+                      compact && styles.chipTextCompact,
+                    ]}
+                  >
+                    Clear
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => this.setState({ showSaveModal: true })}
+                  style={({ pressed }) => [
+                    styles.chipBtn,
+                    styles.saveChip,
+                    compact && styles.chipBtnCompact,
+                    pressed && styles.chipPressed,
+                  ]}
+                >
+                  <Ionicons
+                    name="bookmark"
+                    size={compact ? 14 : 16}
+                    color={Colors.twentyThree}
+                  />
+                  <Text
+                    style={[
+                      styles.saveChipText,
+                      compact && styles.chipTextCompact,
+                    ]}
+                  >
+                    {this.props.loadedWorkoutId ? "Update" : "Save"}
+                  </Text>
                 </Pressable>
               </View>
               <Play
                 favorites={this.state.favorites}
                 sets={this.state.sets}
                 type={this.state.type}
+                compact={compact}
               />
             </View>
           </>
@@ -543,10 +597,30 @@ class FavoritesScreen extends React.Component {
           <Message />
         )}
 
+        {editingExercise ? (
+          <TargetWeightChip
+            hideChip
+            visible
+            exerciseId={editingExercise.id}
+            exerciseName={editingExercise.name}
+            bodyPart={editingExercise.bodyPart}
+            equipment={editingExercise.equipment}
+            targetWeight={editingExercise.targetWeight}
+            targetReps={editingExercise.targetReps}
+            onClose={() => this.setState({ editingExercise: null })}
+            onSave={(w, r) => {
+              this.handleTargetSave(editingExercise.id, w, r);
+              this.setState({ editingExercise: null });
+            }}
+          />
+        ) : null}
+
         <SaveWorkoutModal
           visible={this.state.showSaveModal}
           onClose={() => this.setState({ showSaveModal: false })}
           onSave={this.handleSaveWorkout}
+          initialName={this.props.loadedWorkoutName}
+          isUpdate={!!this.props.loadedWorkoutId}
         />
         <LoadSavedModal
           visible={this.state.showLoadModal}
@@ -619,18 +693,6 @@ const styles = StyleSheet.create({
     color: Colors.textMuted,
     fontSize: 14,
     marginTop: 4},
-  countBadge: {
-    backgroundColor: Colors.accent4,
-    borderRadius: 20,
-    minWidth: 36,
-    height: 36,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 10},
-  countText: {
-    color: "#fff",
-    fontWeight: "700",
-    fontSize: 16},
   controlsCard: {
     marginHorizontal: 16,
     marginBottom: 12,
@@ -666,6 +728,10 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingTop: 4,
     paddingHorizontal: 20},
+  actionStackCompact: {
+    gap: 8,
+    paddingHorizontal: 14,
+  },
   secondaryActions: {
     flexDirection: "row",
     gap: 10},
@@ -677,6 +743,11 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingVertical: 12,
     borderRadius: 14},
+  chipBtnCompact: {
+    paddingVertical: 9,
+    borderRadius: 12,
+    gap: 5,
+  },
   saveChip: {
     backgroundColor: Colors.accent},
   saveChipText: {
@@ -693,6 +764,9 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "700",
     letterSpacing: 0.3},
+  chipTextCompact: {
+    fontSize: 13,
+  },
   chipPressed: {
     opacity: 0.85,
     transform: [{ scale: 0.98 }]},
@@ -708,10 +782,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     marginBottom: 10,
     gap: 8},
+  rowCompact: {
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    marginBottom: 6,
+    gap: 6,
+  },
   rowDragging: {
     opacity: 0},
   dragHandle: {
     padding: 4},
+  dragHandleCompact: {
+    padding: 2,
+  },
   dragOverlay: {
     position: "absolute",
     zIndex: 10,
@@ -722,24 +805,45 @@ const styles = StyleSheet.create({
     fontSize: 14,
     width: 18,
     textAlign: "center"},
+  indexCompact: {
+    fontSize: 12,
+    width: 16,
+  },
   thumb: {
-    width: 52,
-    height: 52,
-    borderRadius: 10,
+    width: 70,
+    height: 70,
+    borderRadius: 12,
   },
   rowContent: {
     flex: 1,
-    minWidth: 0},
+    minWidth: 0,
+    justifyContent: "center",
+  },
   name: {
     color: "#fff",
     textTransform: "capitalize",
     fontSize: 15,
     fontWeight: "500"},
+  nameCompact: {
+    fontSize: 14,
+  },
   equipment: {
     color: Colors.textMuted,
     fontSize: 12,
     marginTop: 2,
-    textTransform: "capitalize"}});
+    textTransform: "capitalize"},
+  equipmentCompact: {
+    fontSize: 11,
+    marginTop: 1,
+  },
+  editHint: {
+    color: Colors.glowCyan,
+    fontSize: 10,
+    fontWeight: "600",
+    marginTop: 3,
+    opacity: 0.75,
+  },
+});
 
 export default connect(mapStateToProps, {
   SubtractFavorite,

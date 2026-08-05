@@ -1,8 +1,9 @@
 import Constants from "expo-constants";
 import { WorkoutX } from "@workoutx/sdk";
+import { supabase } from "./supabase";
 
 // ---------------------------------------------------------------------------
-// WorkoutX (active)
+// WorkoutX via shared Supabase cache (demand-driven) + direct SDK fallback
 // ---------------------------------------------------------------------------
 
 const WORKOUTX_BASE = "https://api.workoutxapp.com";
@@ -36,8 +37,50 @@ function getWorkoutXClient() {
   return wxClient;
 }
 
-/** Direct GIF URL for <Image source={{ uri }} /> (API key in query string). */
-export function getExerciseImageUri(exerciseId: string, _resolution = EXERCISE_GIF_RESOLUTION) {
+type CacheAction =
+  | {
+      action: "page";
+      kind: ExerciseListKind;
+      value: string;
+      offset: number;
+      limit: number;
+    }
+  | { action: "exercise"; id: string }
+  | { action: "gif"; id: string };
+
+async function invokeExerciseCache<T>(body: CacheAction): Promise<T | null> {
+  try {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (!session?.access_token) return null;
+
+    const { data, error } = await supabase.functions.invoke("exercise-cache", {
+      body,
+    });
+    if (error) {
+      console.warn("[exercise-cache]", error.message);
+      return null;
+    }
+    if (data && typeof data === "object" && "error" in data && data.error) {
+      console.warn("[exercise-cache]", String(data.error));
+      return null;
+    }
+    return data as T;
+  } catch (e) {
+    console.warn(
+      "[exercise-cache]",
+      e instanceof Error ? e.message : "invoke failed"
+    );
+    return null;
+  }
+}
+
+/** Direct GIF URL (counts against WorkoutX). Prefer resolveExerciseGifUri. */
+export function getExerciseImageUri(
+  exerciseId: string,
+  _resolution = EXERCISE_GIF_RESOLUTION
+) {
   const wx = getWorkoutXClient();
   return wx.gifUrl(exerciseId);
 }
@@ -47,6 +90,45 @@ export function getExerciseImageSource(
   resolution = EXERCISE_GIF_RESOLUTION
 ) {
   return { uri: getExerciseImageUri(exerciseId, resolution) };
+}
+
+const gifUriCache = new Map<string, string>();
+const gifUriInflight = new Map<string, Promise<string>>();
+
+/**
+ * Resolve a GIF URL via shared server cache (Supabase Storage) when possible.
+ * Falls back to direct WorkoutX gifUrl so the UI still works pre-deploy.
+ */
+export async function resolveExerciseGifUri(
+  exerciseId: string,
+  _resolution = EXERCISE_GIF_RESOLUTION
+): Promise<string> {
+  const id = String(exerciseId || "").trim().replace(/\.gif$/i, "");
+  if (!id) throw new Error("exerciseId required");
+
+  const cached = gifUriCache.get(id);
+  if (cached) return cached;
+
+  const inflight = gifUriInflight.get(id);
+  if (inflight) return inflight;
+
+  const promise = (async () => {
+    const fromCache = await invokeExerciseCache<{ url?: string }>({
+      action: "gif",
+      id,
+    });
+    const url =
+      fromCache?.url && typeof fromCache.url === "string"
+        ? fromCache.url
+        : getExerciseImageUri(id);
+    gifUriCache.set(id, url);
+    return url;
+  })().finally(() => {
+    gifUriInflight.delete(id);
+  });
+
+  gifUriInflight.set(id, promise);
+  return promise;
 }
 
 function unwrapList(data: unknown): unknown[] {
@@ -62,39 +144,148 @@ function unwrapList(data: unknown): unknown[] {
   return [];
 }
 
+export const EXERCISE_PAGE_SIZE = 100;
+
+export type ExerciseListKind = "equipment" | "bodyPart" | "name";
+
+export type ExercisePage = {
+  exercises: any[];
+  total: number;
+  offset: number;
+  hasMore: boolean;
+};
+
+/** Soft-normalize plurals so "squats" pages the rich "squat" catalog. */
+export function normalizeSearchTerm(raw: string) {
+  const lower = String(raw).trim().toLowerCase();
+  if (
+    lower.length > 3 &&
+    /s$/i.test(lower) &&
+    !/(ss|us|is|oes)$/i.test(lower)
+  ) {
+    return lower.endsWith("ies")
+      ? `${lower.slice(0, -3)}y`
+      : lower.replace(/s$/i, "");
+  }
+  return lower;
+}
+
+function toPage(raw: unknown, offset: number, limit: number): ExercisePage {
+  const exercises = unwrapList(raw);
+  const total =
+    raw &&
+    typeof raw === "object" &&
+    "total" in raw &&
+    typeof (raw as { total: unknown }).total === "number"
+      ? (raw as { total: number }).total
+      : offset + exercises.length;
+  return {
+    exercises,
+    total,
+    offset,
+    hasMore: offset + exercises.length < total,
+  };
+}
+
+function pageFromCachePayload(data: {
+  exercises?: unknown[];
+  total?: number;
+  offset?: number;
+  hasMore?: boolean;
+}): ExercisePage | null {
+  if (!data || !Array.isArray(data.exercises)) return null;
+  const offset = Number(data.offset) || 0;
+  const total =
+    typeof data.total === "number" ? data.total : offset + data.exercises.length;
+  return {
+    exercises: data.exercises,
+    total,
+    offset,
+    hasMore:
+      typeof data.hasMore === "boolean"
+        ? data.hasMore
+        : offset + data.exercises.length < total,
+  };
+}
+
+/**
+ * Paginated list fetch — shared cache first, then WorkoutX.
+ */
+export async function fetchExercisePage(
+  kind: ExerciseListKind,
+  value: string,
+  offset = 0,
+  limit = EXERCISE_PAGE_SIZE
+): Promise<ExercisePage> {
+  const cached = await invokeExerciseCache<{
+    exercises?: unknown[];
+    total?: number;
+    offset?: number;
+    hasMore?: boolean;
+  }>({
+    action: "page",
+    kind,
+    value,
+    offset,
+    limit,
+  });
+  const fromCache = cached ? pageFromCachePayload(cached) : null;
+  if (fromCache) return fromCache;
+
+  const wx = getWorkoutXClient();
+  const params = { limit, offset };
+
+  try {
+    if (kind === "equipment") {
+      const page = await wx.exercises.byEquipment(value, params);
+      return toPage(page, offset, limit);
+    }
+    if (kind === "bodyPart") {
+      const page = await wx.exercises.byBodyPart(value, params);
+      return toPage(page, offset, limit);
+    }
+    const page = await wx.exercises.byName(normalizeSearchTerm(value), params);
+    return toPage(page, offset, limit);
+  } catch (err: any) {
+    const status = err?.status ?? "";
+    const message = err?.message ?? "Request failed";
+    throw new Error(status ? `${status}: ${message}` : message);
+  }
+}
+
 /**
  * Compatibility wrapper around the old ExerciseDB-style paths used by screens.
- * Maps to WorkoutX SDK methods and returns arrays (list) or a single exercise.
  */
 export async function fetchExercises(path: string) {
-  const wx = getWorkoutXClient();
   const decoded = decodeURIComponent(path);
 
   try {
-    // /exercises/exercise/:id
     const byId = decoded.match(/^\/exercises\/exercise\/(.+)$/);
     if (byId?.[1]) {
-      return await wx.exercises.get(byId[1]);
+      const cached = await invokeExerciseCache<{ exercise?: unknown }>({
+        action: "exercise",
+        id: byId[1],
+      });
+      if (cached?.exercise) return cached.exercise;
+      return await getWorkoutXClient().exercises.get(byId[1]);
     }
 
-    // /exercises/equipment/:equipment
     const byEquipment = decoded.match(/^\/exercises\/equipment\/(.+)$/);
     if (byEquipment?.[1]) {
-      const page = await wx.exercises.byEquipment(byEquipment[1], { limit: 100 });
-      return unwrapList(page);
+      const page = await fetchExercisePage("equipment", byEquipment[1], 0);
+      return page.exercises;
     }
 
-    // /exercises/bodyPart/:bodyPart
     const byBodyPart = decoded.match(/^\/exercises\/bodyPart\/(.+)$/);
     if (byBodyPart?.[1]) {
-      const page = await wx.exercises.byBodyPart(byBodyPart[1], { limit: 100 });
-      return unwrapList(page);
+      const page = await fetchExercisePage("bodyPart", byBodyPart[1], 0);
+      return page.exercises;
     }
 
-    // /exercises/name/:name
     const byName = decoded.match(/^\/exercises\/name\/(.+)$/);
     if (byName?.[1]) {
-      return await wx.exercises.byName(byName[1], { limit: 100 });
+      const page = await fetchExercisePage("name", byName[1], 0);
+      return page.exercises;
     }
 
     throw new Error(`Unsupported exercise path: ${path}`);

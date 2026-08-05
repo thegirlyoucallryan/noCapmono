@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Modal,
   View,
@@ -14,12 +14,28 @@ type Props = {
   visible: boolean;
   onClose: () => void;
   onSave: (name: string) => Promise<void>;
+  /** When set, modal updates an existing saved workout */
+  initialName?: string | null;
+  isUpdate?: boolean;
 };
 
-export function SaveWorkoutModal({ visible, onClose, onSave }: Props) {
+export function SaveWorkoutModal({
+  visible,
+  onClose,
+  onSave,
+  initialName = null,
+  isUpdate = false,
+}: Props) {
   const [name, setName] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!visible) return;
+    setName(initialName?.trim() ?? "");
+    setError(null);
+    setSaving(false);
+  }, [visible, initialName]);
 
   const handleSave = async () => {
     const trimmed = name.trim();
@@ -49,8 +65,14 @@ export function SaveWorkoutModal({ visible, onClose, onSave }: Props) {
     >
       <Pressable style={styles.backdrop} onPress={onClose}>
         <Pressable style={styles.card} onPress={(e) => e.stopPropagation()}>
-          <Text style={styles.title}>Save workout</Text>
-          <Text style={styles.hint}>Name it so you can run it again later.</Text>
+          <Text style={styles.title}>
+            {isUpdate ? "Update workout" : "Save workout"}
+          </Text>
+          <Text style={styles.hint}>
+            {isUpdate
+              ? "Keep the name or rename — then save your changes."
+              : "Name it so you can run it again later."}
+          </Text>
           <TextInput
             style={styles.input}
             value={name}
@@ -74,7 +96,9 @@ export function SaveWorkoutModal({ visible, onClose, onSave }: Props) {
               {saving ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <Text style={styles.saveText}>Save</Text>
+                <Text style={styles.saveText}>
+                  {isUpdate ? "Update" : "Save"}
+                </Text>
               )}
             </Pressable>
           </View>

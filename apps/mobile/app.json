@@ -3,7 +3,7 @@
     "name": "No-Cap",
     "slug": "no-cap-fitness-app",
     "scheme": "nocap",
-    "version": "1.0.6",
+    "version": "1.0.9",
     "orientation": "portrait",
     "icon": "./assets/noCapIcon.png",
     "splash": {
@@ -17,7 +17,7 @@
     "ios": {
       "bundleIdentifier": "com.no.cap.fitness.app",
       "supportsTablet": true,
-      "buildNumber": "17",
+      "buildNumber": "37",
       "usesAppleSignIn": true,
       "infoPlist": {
         "NSMotionUsageDescription": "Allow No-Cap to count steps with the pedometer in Tools.",
@@ -29,7 +29,7 @@
     },
     "android": {
       "package": "com.no.cap.fitness.app",
-      "versionCode": 8,
+      "versionCode": 22,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptiveIcon.png"
       },
@@ -42,6 +42,14 @@
       "expo-apple-authentication",
       "expo-font",
       "expo-web-browser",
+      [
+        "@sentry/react-native/expo",
+        {
+          "organization": "hartleybuildsapps",
+          "project": "react-native",
+          "note": "Set SENTRY_AUTH_TOKEN in EAS secrets for source maps. Runtime needs EXPO_PUBLIC_SENTRY_DSN."
+        }
+      ],
       [
         "expo-build-properties",
         {

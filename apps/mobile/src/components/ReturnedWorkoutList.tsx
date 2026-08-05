@@ -1,4 +1,4 @@
-import { View, FlatList, RefreshControl } from "react-native";
+import { View, FlatList, RefreshControl, ActivityIndicator } from "react-native";
 import Colors from "../constants/Colors";
 
 const ReturnedWorkoutList = (props: {
@@ -9,6 +9,9 @@ const ReturnedWorkoutList = (props: {
   refreshing?: boolean;
   onRefresh?: () => void;
   listBottomInset?: number;
+  onEndReached?: () => void;
+  loadingMore?: boolean;
+  hasMore?: boolean;
 }) => {
   return (
     <View style={[{ flex: 1 }, props.style]}>
@@ -20,6 +23,17 @@ const ReturnedWorkoutList = (props: {
         contentContainerStyle={{
           paddingBottom: props.listBottomInset ?? 16,
         }}
+        onEndReached={props.onEndReached}
+        onEndReachedThreshold={0.4}
+        ListFooterComponent={
+          props.loadingMore ? (
+            <View style={{ paddingVertical: 16, alignItems: "center" }}>
+              <ActivityIndicator color={Colors.accent} />
+            </View>
+          ) : props.hasMore ? (
+            <View style={{ height: 24 }} />
+          ) : null
+        }
         refreshControl={
           props.onRefresh ? (
             <RefreshControl

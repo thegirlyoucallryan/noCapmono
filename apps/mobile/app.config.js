@@ -12,5 +12,6 @@ module.exports = {
     supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL,
     supabaseKey: process.env.EXPO_PUBLIC_SUPABASE_KEY,
     spotifyClientId: process.env.EXPO_PUBLIC_SPOTIFY_CLIENT_ID,
+    sentryDsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
   },
 };

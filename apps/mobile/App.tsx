@@ -13,9 +13,39 @@ import { PaperTheme } from "./src/constants/PaperTheme";
 import { useFonts, BebasNeue_400Regular } from "@expo-google-fonts/bebas-neue";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect } from "react";
+import Constants from "expo-constants";
+import * as Sentry from "@sentry/react-native";
 import Colors from "./src/constants/Colors";
+import { WorkoutQueuePersist } from "./src/components/WorkoutQueuePersist";
 
-SplashScreen.preventAutoHideAsync().catch(() => {});
+const sentryDsn =
+  process.env.EXPO_PUBLIC_SENTRY_DSN ||
+  String(
+    (Constants.expoConfig?.extra as { sentryDsn?: string } | undefined)
+      ?.sentryDsn ?? ""
+  ).trim();
+
+Sentry.init({
+  dsn: sentryDsn || undefined,
+  sendDefaultPii: true,
+  tracesSampleRate: 0.2,
+  enableAutoSessionTracking: true,
+  enableLogs: true,
+  environment: __DEV__ ? "development" : "production",
+  replaysSessionSampleRate: 0.1,
+  replaysOnErrorSampleRate: 1.0,
+  integrations: [Sentry.mobileReplayIntegration()],
+});
+
+if (sentryDsn) {
+  Sentry.captureMessage("app_js_started", "info");
+}
+
+/**
+ * TestFlight hang: preventAutoHide + waiting on useFonts (fonts often
+ * never resolve in release). Never hold splash; never block UI on fonts.
+ */
+SplashScreen.hideAsync().catch(() => {});
 
 const rootReducer = combineReducers({
   favorites: workOutReducer,
@@ -23,26 +53,25 @@ const rootReducer = combineReducers({
 });
 const store = createStore(rootReducer, applyMiddleware(thunk));
 
-export default function App() {
-  const [fontsLoaded, fontError] = useFonts({
+function App() {
+  useFonts({
     BebasNeue_400Regular,
   });
 
   useEffect(() => {
-    if (fontsLoaded || fontError) {
-      SplashScreen.hideAsync().catch(() => {});
+    SplashScreen.hideAsync().catch(() => {});
+    if (sentryDsn) {
+      Sentry.addBreadcrumb({ category: "boot", message: "App mounted" });
+      Sentry.captureMessage("app_mounted", "info");
     }
-  }, [fontsLoaded, fontError]);
-
-  if (!fontsLoaded && !fontError) {
-    return null;
-  }
+  }, []);
 
   return (
     <Provider store={store}>
       <SafeAreaProvider>
         <GestureHandlerRootView style={{ flex: 1 }}>
           <PaperProvider theme={PaperTheme}>
+            <WorkoutQueuePersist />
             <StatusBar
               barStyle="light-content"
               backgroundColor={Colors.twentyThree}
@@ -57,3 +86,5 @@ export default function App() {
     </Provider>
   );
 }
+
+export default Sentry.wrap(App);

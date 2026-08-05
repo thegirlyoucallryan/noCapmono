@@ -8,11 +8,12 @@ import {
   View,
   ViewStyle,
   Platform,
+  ActivityIndicator,
 } from "react-native";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   EXERCISE_GIF_RESOLUTION,
-  getExerciseImageSource,
+  resolveExerciseGifUri,
 } from "../../utils/exerciseApi";
 import Colors from "../constants/Colors";
 
@@ -35,6 +36,26 @@ export function ExerciseGif({
   ...props
 }: ExerciseGifProps) {
   const [failed, setFailed] = useState(false);
+  const [uri, setUri] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setFailed(false);
+    setUri(null);
+    if (!exerciseId) return;
+
+    resolveExerciseGifUri(exerciseId, resolution)
+      .then((next) => {
+        if (!cancelled) setUri(next);
+      })
+      .catch(() => {
+        if (!cancelled) setFailed(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [exerciseId, resolution]);
 
   if (!exerciseId) {
     return null;
@@ -91,17 +112,21 @@ export function ExerciseGif({
           },
         ]}
       >
-        <Image
-          source={getExerciseImageSource(exerciseId, resolution)}
-          onError={() => setFailed(true)}
-          resizeMode={resizeMode}
-          style={[
-            styles.image,
-            { width: frameWidth, height: frameHeight },
-            imageStyle,
-          ]}
-          {...props}
-        />
+        {uri ? (
+          <Image
+            source={{ uri }}
+            onError={() => setFailed(true)}
+            resizeMode={resizeMode}
+            style={[
+              styles.image,
+              { width: frameWidth, height: frameHeight },
+              imageStyle,
+            ]}
+            {...props}
+          />
+        ) : (
+          <ActivityIndicator color={Colors.primary} />
+        )}
       </View>
     </View>
   );
@@ -124,7 +149,6 @@ const styles = StyleSheet.create({
     ...Platform.select({
       ios: {},
       android: {
-        // Android elevation alone; deepen with a faint cyan rim
         borderColor: "rgba(0, 100, 200, 0.35)",
       },
     }),
@@ -132,6 +156,8 @@ const styles = StyleSheet.create({
   clip: {
     overflow: "hidden",
     backgroundColor: "#0b1224",
+    alignItems: "center",
+    justifyContent: "center",
   },
   image: {
     alignSelf: "center",

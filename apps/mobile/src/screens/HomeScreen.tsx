@@ -5,6 +5,7 @@ import {
   TextInput,
   StyleSheet,
   Pressable,
+  Button,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -14,6 +15,7 @@ import HorizontalSlider from "../components/HorizontalSlider";
 import { BuildHero } from "../components/BuildHero";
 import { SmokyMountains } from "../components/SmokyMountains";
 import { WORKOUT_MINI_BAR_INSET } from "../components/WorkoutMiniBar";
+
 
 const EquipmentObj = [
   { id: "c1", equipment: "Band", keyName: "band" },
@@ -39,7 +41,7 @@ const Categories = [
   { id: "c4", title: "chest", keyName: "Chest" },
   { id: "c5", title: "upper arms", keyName: "Arms" },
   { id: "c6", title: "lower legs", keyName: "Calves" },
-  { id: "c7", title: "upper legs", keyName: "Glutes" },
+  { id: "c7", title: "upper legs", keyName: "Legs" },
   { id: "c8", title: "waist", keyName: "Abs" },
   { id: "c9", title: "lower arms", keyName: "Forearms" },
   { id: "c10", title: "neck", keyName: "Neck" },
@@ -95,6 +97,7 @@ const HomeScreen = (props: any) => {
         </View>
 
         <OrDivider />
+         
 
         <HorizontalSlider
           data={Categories}

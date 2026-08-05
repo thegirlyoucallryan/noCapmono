@@ -24,10 +24,15 @@ type Props = {
   targetWeight?: number | null;
   targetReps?: number | null;
   onSave: (weight: number | null, reps: number | null) => void;
+  /** Controlled open (My Workout row tap). When set, chip is hidden. */
+  visible?: boolean;
+  onClose?: () => void;
+  /** Hide the inline chip — modal only */
+  hideChip?: boolean;
 };
 
 /**
- * Compact My Workout chip — planned weight × reps without growing the row.
+ * Target weight × reps editor. Inline chip, or modal-only via visible/hideChip.
  */
 export function TargetWeightChip({
   exerciseId,
@@ -37,8 +42,13 @@ export function TargetWeightChip({
   targetWeight,
   targetReps,
   onSave,
+  visible,
+  onClose,
+  hideChip = false,
 }: Props) {
-  const [open, setOpen] = useState(false);
+  const controlled = visible !== undefined;
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlled ? !!visible : internalOpen;
   const [weight, setWeight] = useState("");
   const [reps, setReps] = useState("");
   const [hint, setHint] = useState<string | null>(null);
@@ -48,6 +58,11 @@ export function TargetWeightChip({
     equipment,
     name: exerciseName,
   });
+
+  const close = () => {
+    if (controlled) onClose?.();
+    else setInternalOpen(false);
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -90,7 +105,7 @@ export function TargetWeightChip({
     };
   }, [open, exerciseId, targetWeight, targetReps]);
 
-  if (!usesWeight) return null;
+  if (!usesWeight && !controlled) return null;
 
   const label =
     targetWeight != null
@@ -104,36 +119,38 @@ export function TargetWeightChip({
       Number.isFinite(w) ? w : null,
       Number.isFinite(r) ? r : null
     );
-    setOpen(false);
+    close();
   };
 
   const handleClear = () => {
     onSave(null, null);
-    setOpen(false);
+    close();
   };
 
   return (
     <>
-      <Pressable
-        onPress={() => setOpen(true)}
-        hitSlop={6}
-        style={[styles.chip, targetWeight != null && styles.chipSet]}
-      >
-        <Text
-          style={[styles.chipText, targetWeight != null && styles.chipTextSet]}
-          numberOfLines={1}
+      {!hideChip && usesWeight ? (
+        <Pressable
+          onPress={() => (controlled ? onClose?.() : setInternalOpen(true))}
+          hitSlop={6}
+          style={[styles.chip, targetWeight != null && styles.chipSet]}
         >
-          {label}
-        </Text>
-      </Pressable>
+          <Text
+            style={[styles.chipText, targetWeight != null && styles.chipTextSet]}
+            numberOfLines={1}
+          >
+            {label}
+          </Text>
+        </Pressable>
+      ) : null}
 
       <Modal
         visible={open}
         transparent
         animationType="fade"
-        onRequestClose={() => setOpen(false)}
+        onRequestClose={close}
       >
-        <Pressable style={styles.backdrop} onPress={() => setOpen(false)}>
+        <Pressable style={styles.backdrop} onPress={close}>
           <KeyboardAvoidingView
             behavior={Platform.OS === "ios" ? "padding" : undefined}
             style={styles.centered}
@@ -145,43 +162,57 @@ export function TargetWeightChip({
               <Text style={styles.sub}>Target for this workout</Text>
               {hint ? <Text style={styles.hint}>{hint}</Text> : null}
 
-              <View style={styles.inputs}>
-                <View style={styles.field}>
-                  <Text style={styles.fieldLabel}>Weight</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={weight}
-                    onChangeText={setWeight}
-                    keyboardType="decimal-pad"
-                    placeholder="lb"
-                    placeholderTextColor={Colors.textMuted}
-                    autoFocus
-                  />
+              {!usesWeight ? (
+                <Text style={styles.hint}>
+                  This move doesn’t use a weight target.
+                </Text>
+              ) : (
+                <View style={styles.inputs}>
+                  <View style={styles.field}>
+                    <Text style={styles.fieldLabel}>Weight</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={weight}
+                      onChangeText={setWeight}
+                      keyboardType="decimal-pad"
+                      placeholder="lb"
+                      placeholderTextColor={Colors.textMuted}
+                      autoFocus
+                    />
+                  </View>
+                  <Text style={styles.times}>×</Text>
+                  <View style={styles.field}>
+                    <Text style={styles.fieldLabel}>Reps</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={reps}
+                      onChangeText={setReps}
+                      keyboardType="number-pad"
+                      placeholder="—"
+                      placeholderTextColor={Colors.textMuted}
+                    />
+                  </View>
                 </View>
-                <Text style={styles.times}>×</Text>
-                <View style={styles.field}>
-                  <Text style={styles.fieldLabel}>Reps</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={reps}
-                    onChangeText={setReps}
-                    keyboardType="number-pad"
-                    placeholder="—"
-                    placeholderTextColor={Colors.textMuted}
-                  />
-                </View>
-              </View>
+              )}
 
               <View style={styles.actions}>
-                <Pressable onPress={handleClear} style={styles.btnGhost}>
-                  <Text style={styles.btnGhostText}>Clear</Text>
-                </Pressable>
-                <Pressable onPress={() => setOpen(false)} style={styles.btnGhost}>
+                {usesWeight ? (
+                  <Pressable onPress={handleClear} style={styles.btnGhost}>
+                    <Text style={styles.btnGhostText}>Clear</Text>
+                  </Pressable>
+                ) : null}
+                <Pressable onPress={close} style={styles.btnGhost}>
                   <Text style={styles.btnGhostText}>Cancel</Text>
                 </Pressable>
-                <Pressable onPress={handleSave} style={styles.btnPrimary}>
-                  <Text style={styles.btnPrimaryText}>Save</Text>
-                </Pressable>
+                {usesWeight ? (
+                  <Pressable onPress={handleSave} style={styles.btnPrimary}>
+                    <Text style={styles.btnPrimaryText}>Save</Text>
+                  </Pressable>
+                ) : (
+                  <Pressable onPress={close} style={styles.btnPrimary}>
+                    <Text style={styles.btnPrimaryText}>Done</Text>
+                  </Pressable>
+                )}
               </View>
             </Pressable>
           </KeyboardAvoidingView>
@@ -194,26 +225,26 @@ export function TargetWeightChip({
 const styles = StyleSheet.create({
   chip: {
     alignSelf: "flex-start",
-    marginTop: 5,
-    paddingHorizontal: 11,
-    paddingVertical: 5,
-    borderRadius: 9,
-    backgroundColor: Colors.inset,
+    marginTop: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 10,
+    backgroundColor: Colors.glowCyanDim,
     borderWidth: 1,
-    borderColor: Colors.highlight,
-    maxWidth: 120,
+    borderColor: "rgba(0, 212, 255, 0.45)",
+    maxWidth: 132,
   },
   chipSet: {
-    borderColor: `${Colors.ctaStart}88`,
-    backgroundColor: `${Colors.ctaStart}22`,
+    borderColor: Colors.glowCyan,
+    backgroundColor: "rgba(0, 212, 255, 0.22)",
   },
   chipText: {
-    color: Colors.textMuted,
-    fontSize: 13,
-    fontWeight: "600",
+    color: Colors.glowCyan,
+    fontSize: 14,
+    fontWeight: "700",
   },
   chipTextSet: {
-    color: Colors.primary,
+    color: Colors.glowCyan,
   },
   backdrop: {
     flex: 1,

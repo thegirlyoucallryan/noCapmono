@@ -8,7 +8,6 @@ import {
 } from "react-native";
 import * as AppleAuthentication from "expo-apple-authentication";
 import { supabase } from "../../utils/supabase";
-import { acceptLegal, markLegalPending } from "../../utils/workoutApi";
 import Colors from "../constants/Colors";
 
 function formatAuthError(error: any): string {
@@ -22,16 +21,11 @@ function formatAuthError(error: any): string {
   return parts.join("\n") || JSON.stringify(error);
 }
 
-type Props = {
-  disabled?: boolean;
-  requireAgreement?: boolean;
-};
-
 /**
  * Native Apple Sign-In (Expo). Matches Supabase Expo docs — no nonce.
  * Requires: Simulator signed into iCloud, or a real device.
  */
-export function SignInWithApple({ disabled = false }: Props) {
+export function SignInWithApple() {
   const [available, setAvailable] = useState(false);
 
   useEffect(() => {
@@ -44,14 +38,6 @@ export function SignInWithApple({ disabled = false }: Props) {
   }
 
   const onPress = async () => {
-    if (disabled) {
-      Alert.alert(
-        "Agree first",
-        "Please accept the Terms & Privacy Policy to continue."
-      );
-      return;
-    }
-
     if (!available) {
       Alert.alert(
         "Apple Sign-In unavailable",
@@ -61,8 +47,6 @@ export function SignInWithApple({ disabled = false }: Props) {
     }
 
     try {
-      await markLegalPending();
-
       const credential = await AppleAuthentication.signInAsync({
         requestedScopes: [
           AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
@@ -119,12 +103,7 @@ export function SignInWithApple({ disabled = false }: Props) {
           });
         }
       }
-
-      try {
-        await acceptLegal();
-      } catch (e: any) {
-        console.warn("Legal accept after Apple sign-in:", e?.message);
-      }
+      // First-time / outdated legal → AcceptLegalScreen. Returning users skip it.
     } catch (error: any) {
       if (error.code === "ERR_REQUEST_CANCELED") {
         return;
@@ -147,14 +126,6 @@ export function SignInWithApple({ disabled = false }: Props) {
     return (
       <Pressable onPress={onPress} style={styles.disabledWrap}>
         <Text style={styles.disabledText}>Apple Sign-In unavailable</Text>
-      </Pressable>
-    );
-  }
-
-  if (disabled) {
-    return (
-      <Pressable onPress={onPress} style={styles.disabledWrap}>
-        <Text style={styles.disabledText}>Sign in with Apple</Text>
       </Pressable>
     );
   }
