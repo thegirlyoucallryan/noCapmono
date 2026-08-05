@@ -16,6 +16,7 @@ import { FinaleScreen } from "../screens/FinaleScreen";
 import { SignIn } from "../screens/SignIn";
 import { AcceptLegalScreen } from "../screens/AcceptLegalScreen";
 import { TermsAndConditionsScreen } from "../screens/TermsAndConditionsScreen";
+import type { LegalStackParamList } from "../screens/TermsAndConditionsScreen";
 import { PrivacyPolicyScreen } from "../screens/PrivacyPolicyScreen";
 import { supabase } from "../../utils/supabase";
 import { useEffect, useState } from "react";
@@ -27,6 +28,7 @@ import { ActivityIndicator } from "react-native";
 import { useDispatch } from "react-redux";
 import { clearFavorites } from "../store/actions";
 import { clearLegacySharedLocalData } from "../../utils/workoutStore";
+import * as Sentry from "@sentry/react-native";
 
 export type RootStackParamList = {
   Home: undefined;
@@ -50,11 +52,14 @@ declare global {
   }
 }
 const Stack = createStackNavigator();
+const LegalStack = createStackNavigator<LegalStackParamList>();
 
 export function AppNavigator() {
   const dispatch = useDispatch();
   const [session, setSession] = useState<Session | null>(null);
   const [legalOk, setLegalOk] = useState(false);
+  // Start false after a short paint — never look like forever-splash.
+  // (Boot spinner uses same #141418 as splash; hung auth looked identical.)
   const [booting, setBooting] = useState(true);
 
   const refreshLegal = async () => {
@@ -73,24 +78,57 @@ export function AppNavigator() {
 
     clearLegacySharedLocalData().catch(() => {});
 
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (!mounted) return;
-      lastUserId = session?.user?.id ?? null;
-      setSession(session);
-      if (session?.user) {
-        await refreshLegal();
-      } else {
-        setLegalOk(false);
+    // Hard cap: never stay on boot screen more than 2s (TestFlight auth hangs).
+    const bootDeadline = setTimeout(() => {
+      if (mounted) {
+        Sentry.addBreadcrumb({
+          category: "boot",
+          message: "boot_deadline_forced",
+        });
+        setBooting(false);
       }
-      setBooting(false);
-    });
+    }, 2000);
+
+    const finishBoot = () => {
+      clearTimeout(bootDeadline);
+      if (mounted) setBooting(false);
+    };
+
+    Sentry.addBreadcrumb({ category: "boot", message: "getSession_start" });
+    supabase.auth
+      .getSession()
+      .then(async ({ data: { session } }) => {
+        if (!mounted) return;
+        Sentry.addBreadcrumb({
+          category: "boot",
+          message: session?.user ? "getSession_user" : "getSession_none",
+        });
+        lastUserId = session?.user?.id ?? null;
+        setSession(session);
+        // Leave splash/boot UI immediately — legal check must not block launch.
+        finishBoot();
+        if (session?.user) {
+          await refreshLegal();
+          Sentry.addBreadcrumb({ category: "boot", message: "legal_done" });
+        } else {
+          setLegalOk(false);
+        }
+      })
+      .catch((e) => {
+        Sentry.captureException(e);
+        finishBoot();
+      });
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (_event, session) => {
       const nextId = session?.user?.id ?? null;
       if (lastUserId !== undefined && lastUserId !== nextId) {
-        dispatch(clearFavorites());
+        // Only clear immediately on sign-out. On account switch,
+        // WorkoutQueuePersist hydrates that user's saved queue.
+        if (!nextId) {
+          dispatch(clearFavorites());
+        }
       }
       lastUserId = nextId;
       setSession(session);
@@ -103,6 +141,7 @@ export function AppNavigator() {
 
     return () => {
       mounted = false;
+      clearTimeout(bootDeadline);
       subscription.unsubscribe();
     };
   }, [dispatch]);
@@ -117,7 +156,7 @@ export function AppNavigator() {
           justifyContent: "center",
         }}
       >
-        <ActivityIndicator color={Colors.accent} size="large" />
+        <ActivityIndicator color={Colors.primary} size="large" />
       </View>
     );
   }
@@ -143,43 +182,43 @@ export function AppNavigator() {
 
 function AuthStack() {
   return (
-    <Stack.Navigator>
-      <Stack.Screen
+    <LegalStack.Navigator>
+      <LegalStack.Screen
         name="Welcome"
         component={SignIn}
         options={{ headerShown: false }}
       />
-      <Stack.Screen
+      <LegalStack.Screen
         name="TermsAndConditions"
         component={TermsAndConditionsScreen}
         options={{ headerShown: false }}
       />
-      <Stack.Screen
+      <LegalStack.Screen
         name="PrivacyPolicy"
         component={PrivacyPolicyScreen}
         options={{ headerShown: false }}
       />
-    </Stack.Navigator>
+    </LegalStack.Navigator>
   );
 }
 
 function AcceptLegalStack({ onAccepted }: { onAccepted: () => void }) {
   return (
-    <Stack.Navigator>
-      <Stack.Screen name="AcceptLegalHome" options={{ headerShown: false }}>
+    <LegalStack.Navigator>
+      <LegalStack.Screen name="AcceptLegalHome" options={{ headerShown: false }}>
         {() => <AcceptLegalScreen onAccepted={onAccepted} />}
-      </Stack.Screen>
-      <Stack.Screen
+      </LegalStack.Screen>
+      <LegalStack.Screen
         name="TermsAndConditions"
         component={TermsAndConditionsScreen}
         options={{ headerShown: false }}
       />
-      <Stack.Screen
+      <LegalStack.Screen
         name="PrivacyPolicy"
         component={PrivacyPolicyScreen}
         options={{ headerShown: false }}
       />
-    </Stack.Navigator>
+    </LegalStack.Navigator>
   );
 }
 
@@ -359,7 +398,7 @@ export function WorkoutTabs() {
   );
 }
 
-const TabBarIconContainer = connect((state) => ({
+const TabBarIconContainer = connect((state: { favorites: { favoritedExercises: unknown[] } }) => ({
   value: state.favorites.favoritedExercises.length,
 }))(TabBarIcon);
 

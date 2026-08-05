@@ -1,12 +1,11 @@
 // Learn more https://docs.expo.io/guides/customizing-metro
 // SDK 54+ configures monorepo watchFolders automatically — don't override them.
-const path = require("path");
-const { getDefaultConfig } = require("expo/metro-config");
+const { getSentryExpoConfig } = require("@sentry/react-native/metro");
 
 const projectRoot = __dirname;
 
 /** @type {import('expo/metro-config').MetroConfig} */
-const config = getDefaultConfig(projectRoot);
+const config = getSentryExpoConfig(projectRoot);
 
 // Monorepo has React 18 (web) + React 19 (mobile). Also polluted by ~/node_modules.
 // Force every react* import to the mobile app's single copy.

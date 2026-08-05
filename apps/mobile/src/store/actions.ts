@@ -64,7 +64,9 @@ export const clearFavorites = () => {
   };
 };
 
-/** Replace the whole My Workout queue (e.g. load a saved workout) */
+/** Replace the whole My Workout queue (e.g. load a saved workout).
+ *  Omit name/id to keep the currently loaded saved-workout identity.
+ *  Pass null explicitly to clear. */
 export const setWorkout = (
   exercises: {
     id: string;
@@ -75,13 +77,31 @@ export const setWorkout = (
     targetWeight?: number | null;
     targetReps?: number | null;
   }[],
-  workoutName?: string | null
+  workoutName?: string | null,
+  workoutId?: string | null
 ) => {
-  return {
+  const action: {
+    type: typeof SET_WORKOUT;
+    exercises: typeof exercises;
+    workoutName?: string | null;
+    workoutId?: string | null;
+  } = {
     type: SET_WORKOUT,
     exercises,
-    workoutName: workoutName ?? null,
   };
+  if (arguments.length >= 2) {
+    action.workoutName =
+      workoutName != null && String(workoutName).trim()
+        ? String(workoutName).trim()
+        : null;
+  }
+  if (arguments.length >= 3) {
+    action.workoutId =
+      workoutId != null && String(workoutId).trim()
+        ? String(workoutId).trim()
+        : null;
+  }
+  return action;
 };
 
 export const setSessionSettings = (sets: number, type: string) => ({

@@ -9,54 +9,55 @@ import logo from "./assets/icon.png";
 import { TermsPage } from "./TermsPage";
 import { PrivacyPage } from "./PrivacyPage";
 import { ContactPage } from "./ContactPage";
+import { DeleteAccountPage } from "./DeleteAccountPage";
 import "./App.css";
 
 const FEATURES = [
   {
     eyebrow: "Home",
-    title: "Your climb at a glance",
+    title: "Keep your workouts fresh",
     blurb:
-      "Pick up where you left off, jump into saved workouts, and watch your maxes stack — stats that actually mean something.",
+      "Your saved sessions and lift history live here — so you walk in with a plan, not a blank slate.",
     src: homescreen,
     alt: "No Cap home screen with saved workouts and lift maxes",
   },
   {
-    eyebrow: "Build",
-    title: "Make it yours",
+    eyebrow: "Discover",
+    title: "New ideas without starting over",
     blurb:
-      "Search 1300+ moves or filter by body part and equipment. Mix what you want — no cookie-cutter plans.",
+      "Browse 1300+ exercises by muscle or equipment. Swap what’s stale. Keep what still hits.",
     src: search,
-    alt: "Workout builder with search, body parts, and equipment",
+    alt: "Exercise discovery with search, body parts, and equipment",
   },
   {
-    eyebrow: "Library",
-    title: "Add fast. Stay focused.",
+    eyebrow: "Organize",
+    title: "Your routine, ready to go",
     blurb:
-      "Tap through exercises, check what belongs in the session, and keep building without losing your flow.",
+      "Line up today’s session, set your weights, and leave the guesswork in the locker room.",
     src: listview,
-    alt: "Exercise list for band workouts with add controls",
+    alt: "Organized exercise list ready for a workout",
   },
   {
     eyebrow: "Ready",
-    title: "Lock in before you lift",
+    title: "Walk in knowing what’s next",
     blurb:
-      "See what’s coming, set the vibe, and step into the session when you’re locked — not scrolling mid-set.",
+      "See the full run before you start. Cue the vibe. Step onto the floor already locked in.",
     src: getReady,
     alt: "Get ready screen before starting a workout",
   },
   {
     eyebrow: "Play",
-    title: "Focus mode that stays with you",
+    title: "Stay in the set — not the scroll",
     blurb:
-      "One exercise at a time, timer up, Spotify vibes on. Back, skip, next — run the whole workout without leaving the flow.",
+      "One move at a time, timer up, music on. Back, skip, next — keep moving without losing your place.",
     src: focusPlay,
     alt: "Focus play mode showing current exercise and timer",
   },
   {
     eyebrow: "Tools",
-    title: "Estimate. Step. Progress.",
+    title: "Small edges that compound",
     blurb:
-      "Punch in a working set for a smart 1RM read, track steps, and keep the little edges that compound.",
+      "Estimate a smart next weight, log the set, track steps — keep the details that make you better.",
     src: tools,
     alt: "Tools screen with 1RM estimator and step counter",
   },
@@ -75,34 +76,33 @@ function HomePage() {
         <div className="hero__content">
           <div className="hero__brand">
             <img className="hero__logo" src={logo} alt="No Cap Gym App" />
-            <span className="hero__brand-name">No Cap</span>
+            <span className="hero__brand-name">No Cap Gym App</span>
           </div>
-          <p className="hero__kicker">Gym app</p>
+          <p className="hero__kicker">Your know how to lift,  We'll help you keep it fresh.</p>
           <h1 className="hero__title">
             Keep your workout
             <span>Revolutionary</span>
           </h1>
           <p className="hero__sub">
-            Your goals, your way — build from 1300+ exercises, play the session,
-            stack the stats.
+            Discover new exercises, keep what works, and never forget your last max.
           </p>
           <div className="hero__cta-row">
             <button type="button" className="hero__btn" title="Download">
-              Download
+              Download on the App Store
             </button>
-            <p className="hero__platforms">Available on iOS and Android</p>
+            <p className="hero__platforms">Also on Android</p>
           </div>
         </div>
       </section>
 
       <section className="features">
-        <div className="features__intro">
-          <h2>Built for how you train</h2>
+        {/* <div className="features__intro">
+          <h2>Not another AI trainer.</h2>
           <p>
-            From the first build to the last set — every screen is made to stay
-            out of your way and keep you moving.
+            You’re not buying a workout plan. You’re organizing your own
+            training — ideas, variety, and a place that remembers what hit.
           </p>
-        </div>
+        </div> */}
 
         {FEATURES.map((f, i) => (
           <article
@@ -126,6 +126,7 @@ function HomePage() {
       <footer className="site-footer">
         <a href="/terms">Terms & Conditions</a>
         <a href="/privacy">Privacy Policy</a>
+        <a href="/delete-account">Delete account</a>
         <a href="/contact">Contact Us</a>
       </footer>
     </div>
@@ -139,6 +140,9 @@ function App() {
   }
   if (path === "/privacy") {
     return <PrivacyPage />;
+  }
+  if (path === "/delete-account") {
+    return <DeleteAccountPage />;
   }
   if (path === "/contact") {
     return <ContactPage />;

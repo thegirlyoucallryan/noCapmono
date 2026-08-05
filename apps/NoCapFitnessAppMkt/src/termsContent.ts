@@ -155,7 +155,7 @@ THESE LIMITATIONS APPLY EVEN IF ANY REMEDY FAILS OF ITS ESSENTIAL PURPOSE.`,
   },
   {
     title: "17. Termination",
-    body: `You may stop using the App at any time and may request account deletion by contacting us. We may suspend or terminate access at any time for any reason, including violation of these Terms. Sections that by their nature should survive (including Sections 5–8 and 11–18) will survive termination.`,
+    body: `You may stop using the App at any time. You may permanently delete your account in the App from Home → Settings → Delete account, or by contacting us if you no longer have the App. We may suspend or terminate access at any time for any reason, including violation of these Terms. Sections that by their nature should survive (including Sections 5–8 and 11–18) will survive termination.`,
   },
   {
     title: "18. Changes to the Terms",

@@ -109,7 +109,7 @@ a {
   font-size: clamp(5.6rem, 12vw, 11rem);
   line-height: 0.9;
   letter-spacing: 0.02em;
-  max-width: 11ch;
+  max-width: 12ch;
 }
 
 .hero__title span {

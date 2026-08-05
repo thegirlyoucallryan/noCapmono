@@ -15,14 +15,16 @@ const supabaseAnonKey =
 
 if (!supabaseUrl || !supabaseAnonKey) {
   console.warn(
-    "Missing Supabase env. Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_KEY in .env, then restart Metro with: npm start -- --clear"
+    "[supabase] MISSING env — Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_KEY"
   );
 } else {
   console.log(
     "[supabase] url ok:",
     supabaseUrl.slice(0, 32) + "…",
     "key prefix:",
-    supabaseAnonKey.slice(0, 12)
+    supabaseAnonKey.slice(0, 14),
+    "keyLen:",
+    supabaseAnonKey.length
   );
 }
 

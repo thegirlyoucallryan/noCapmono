@@ -18,6 +18,8 @@ type GradientCTAProps = {
   style?: StyleProp<ViewStyle>;
   /** primary = orange hero; secondary = cyan accent */
   variant?: "primary" | "secondary";
+  /** Tighter padding / type for phones */
+  compact?: boolean;
 };
 
 export function GradientCTA({
@@ -27,6 +29,7 @@ export function GradientCTA({
   icon = "play",
   style,
   variant = "primary",
+  compact = false,
 }: GradientCTAProps) {
   const isSecondary = variant === "secondary";
   const colors = disabled
@@ -57,14 +60,23 @@ export function GradientCTA({
         colors={[...colors]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
-        style={styles.gradient}
+        style={[
+          styles.gradient,
+          compact && styles.gradientCompact,
+        ]}
       >
         <Ionicons
           name={icon}
-          size={22}
+          size={compact ? 18 : 22}
           color={isSecondary ? Colors.twentyThree : "#fff"}
         />
-        <Text style={[styles.title, isSecondary && styles.titleSecondary]}>
+        <Text
+          style={[
+            styles.title,
+            compact && styles.titleCompact,
+            isSecondary && styles.titleSecondary,
+          ]}
+        >
           {title}
         </Text>
       </LinearGradient>
@@ -85,12 +97,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
     borderRadius: Theme.radius.xl,
   },
+  gradientCompact: {
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+  },
   title: {
     color: "#fff",
     fontSize: 16,
     fontWeight: "700",
     letterSpacing: 1.1,
     textTransform: "uppercase",
+  },
+  titleCompact: {
+    fontSize: 14,
+    letterSpacing: 0.8,
   },
   titleSecondary: {
     color: Colors.twentyThree,

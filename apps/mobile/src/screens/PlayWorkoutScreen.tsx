@@ -1,20 +1,21 @@
 import {
   Text,
   StyleSheet,
-  Dimensions,
   Image,
   Pressable,
   ScrollView,
   Alert,
   View,
+  AppState,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import Colors from "../constants/Colors";
 import { Exercise } from "../types/types";
-import React, { useEffect, useMemo, useState } from "react";
-import { useDispatch, useSelector } from "react-redux";
 import { useNavigation } from "@react-navigation/native";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useDispatch, useSelector } from "react-redux";
 import CountDown from "../components/CountDown";
 import { NeomorphicView } from "../components/NeomorphicView";
 import { ExerciseGif } from "../components/ExerciseGif";
@@ -26,25 +27,35 @@ import { DISPLAY_FONT } from "../constants/Typography";
 import { SmokyMountains } from "../components/SmokyMountains";
 import { WeightLogger } from "../components/WeightLogger";
 import { GradientCTA } from "../components/GradientCTA";
-import { SpotifyVibePicker } from "../components/SpotifyVibePicker";
+// import { SpotifyVibePicker } from "../components/SpotifyVibePicker"; // Spotify paused
 import {
   PlayLayoutToggle,
   PlayLayoutMode,
 } from "../components/PlayLayoutToggle";
 import { PlayListSession } from "../components/PlayListSession";
-import { recordLastSession } from "../../utils/workoutStore";
-import { clearPlayStart } from "../store/actions";
+import {
+  recordLastSession,
+  saveActivePlaySession,
+  loadActivePlaySession,
+  clearActivePlaySession,
+  estimateCaloriesBurned,
+  formatTension,
+  // formatVolumeLabel, // used with total lifted on done screen
+  formatCaloriesEst,
+} from "../../utils/workoutStore";
+import { clearPlayStart, setWorkout, setSessionSettings } from "../store/actions";
 import Theme from "../constants/Theme";
+import { useLayout } from "../constants/layout";
 
 const PLAY_LAYOUT_KEY = "@nocap/play_layout_mode";
-
-let SCREEN_WIDTH = Dimensions.get("window").width;
+const KEEP_AWAKE_TAG = "nocap-play";
 
 type Phase = "idle" | "ready" | "playing" | "rest" | "done";
 
 const PlayWorkoutScreen = ({ route }: any) => {
   const dispatch = useDispatch();
   const nav = useNavigation<any>();
+  const layout = useLayout();
 
   const favoritesFromStore = useSelector(
     (s: any) => s.favorites.favoritedExercises as Exercise[]
@@ -69,6 +80,11 @@ const PlayWorkoutScreen = ({ route }: any) => {
   const [sessionVolume, setSessionVolume] = useState(0);
   const [sessionTension, setSessionTension] = useState(0);
   const [layoutMode, setLayoutMode] = useState<PlayLayoutMode>("tv");
+  const resumePrompted = useRef(false);
+  /** True after a final commit (complete / End) — blocks further writes. */
+  const sessionCommittedRef = useRef(false);
+  /** True after any mid-session Home snapshot — next save replaces that row. */
+  const earlySavedRef = useRef(false);
 
   const finalWorkout = useMemo(() => {
     if (!favorites?.length) return [];
@@ -78,6 +94,117 @@ const PlayWorkoutScreen = ({ route }: any) => {
     return favorites.flatMap((item) => Array(sets).fill(item)).filter(Boolean);
   }, [favorites, sets, type]);
 
+  const phaseRef = useRef(phase);
+  const currentIndexRef = useRef(currentIndex);
+  const sessionVolumeRef = useRef(sessionVolume);
+  const sessionTensionRef = useRef(sessionTension);
+  const favoritesRef = useRef(favorites);
+  const finalWorkoutRef = useRef(finalWorkout);
+  const setsRef = useRef(sets);
+  const typeRef = useRef(type);
+
+  useEffect(() => {
+    phaseRef.current = phase;
+    currentIndexRef.current = currentIndex;
+    sessionVolumeRef.current = sessionVolume;
+    sessionTensionRef.current = sessionTension;
+    favoritesRef.current = favorites;
+    finalWorkoutRef.current = finalWorkout;
+    setsRef.current = sets;
+    typeRef.current = type;
+  }, [
+    phase,
+    currentIndex,
+    sessionVolume,
+    sessionTension,
+    favorites,
+    finalWorkout,
+    sets,
+    type,
+  ]);
+
+  const saveSessionToHome = async (mode: "complete" | "early") => {
+    const favs = favoritesRef.current;
+    if (!favs.length || sessionCommittedRef.current) return;
+
+    const p = phaseRef.current;
+    const didWork =
+      mode === "complete" ||
+      p === "done" ||
+      sessionTensionRef.current > 0 ||
+      sessionVolumeRef.current > 0 ||
+      currentIndexRef.current > 0 ||
+      p === "playing" ||
+      p === "rest";
+
+    if (!didWork) return;
+
+    const workout = finalWorkoutRef.current;
+    const stepsDone =
+      mode === "complete"
+        ? workout.length
+        : Math.min(currentIndexRef.current + 1, workout.length || 1);
+    const slice = workout.slice(0, Math.max(stepsDone, 1));
+    const uniqueNames = [
+      ...new Set(
+        (slice.length ? slice : favs).map((f) =>
+          f.name.replace(/\(Male\)/i, "").trim()
+        )
+      ),
+    ];
+
+    if (mode === "complete") {
+      clearActivePlaySession().catch(() => {});
+    }
+
+    try {
+      await recordLastSession(
+        {
+          exerciseCount:
+            mode === "complete"
+              ? favs.length
+              : uniqueNames.length || favs.length,
+          sets: setsRef.current,
+          type: String(typeRef.current),
+          names: uniqueNames,
+          volumeLoad: sessionVolumeRef.current,
+          tensionSeconds: sessionTensionRef.current,
+          caloriesEst: estimateCaloriesBurned({
+            tensionSeconds: sessionTensionRef.current,
+            volumeLoad: sessionVolumeRef.current,
+          }),
+        },
+        { replaceLatest: earlySavedRef.current }
+      );
+      earlySavedRef.current = true;
+      if (mode === "complete") {
+        sessionCommittedRef.current = true;
+      }
+    } catch {
+      /* keep flags so a retry can still finalize */
+    }
+  };
+
+  /** Tab away / leave Play / background mid-workout → still update Home */
+  const saveIfLeavingActiveWorkout = () => {
+    const p = phaseRef.current;
+    if (p === "playing" || p === "rest" || p === "done") {
+      void saveSessionToHome(p === "done" ? "complete" : "early");
+    }
+  };
+  // Keep the screen on during an active workout
+  useEffect(() => {
+    const active = phase === "ready" || phase === "playing" || phase === "rest";
+    if (active) {
+      activateKeepAwakeAsync(KEEP_AWAKE_TAG).catch(() => {});
+    } else {
+      deactivateKeepAwake(KEEP_AWAKE_TAG);
+    }
+    return () => {
+      deactivateKeepAwake(KEEP_AWAKE_TAG);
+    };
+  }, [phase]);
+
   useEffect(() => {
     AsyncStorage.getItem(PLAY_LAYOUT_KEY).then((stored) => {
       if (stored === "list" || stored === "tv") {
@@ -85,6 +212,51 @@ const PlayWorkoutScreen = ({ route }: any) => {
       }
     });
   }, []);
+
+  // Offer to resume an interrupted session once
+  useEffect(() => {
+    if (resumePrompted.current || pendingPlayStart) return;
+    resumePrompted.current = true;
+    let alive = true;
+    (async () => {
+      const saved = await loadActivePlaySession();
+      if (!alive || !saved?.favorites?.length) return;
+      Alert.alert(
+        "Resume workout?",
+        `Continue at exercise ${saved.currentIndex + 1} of your last session.`,
+        [
+          {
+            text: "Discard",
+            style: "destructive",
+            onPress: () => {
+              clearActivePlaySession().catch(() => {});
+            },
+          },
+          {
+            text: "Resume",
+            onPress: () => {
+              dispatch(setWorkout(saved.favorites));
+              dispatch(setSessionSettings(saved.sets, saved.type));
+              setCurrentIndex(saved.currentIndex);
+              setTimer(saved.timer > 0 ? saved.timer : 45);
+              setIsActive(saved.isActive);
+              setSessionVolume(saved.sessionVolume ?? 0);
+              setSessionTension(saved.sessionTension ?? 0);
+              sessionCommittedRef.current = false;
+              earlySavedRef.current =
+                (saved.sessionTension ?? 0) > 0 ||
+                (saved.sessionVolume ?? 0) > 0 ||
+                saved.currentIndex > 0;
+              setPhase(saved.phase);
+            },
+          },
+        ]
+      );
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [dispatch, pendingPlayStart]);
 
   const handleLayoutChange = (mode: PlayLayoutMode) => {
     setLayoutMode(mode);
@@ -102,9 +274,91 @@ const PlayWorkoutScreen = ({ route }: any) => {
     setIsActive(true);
     setSessionVolume(0);
     setSessionTension(0);
+    sessionCommittedRef.current = false;
+    earlySavedRef.current = false;
     setPhase("ready");
     dispatch(clearPlayStart());
   }, [pendingPlayStart, favorites.length, dispatch]);
+
+  // Persist in-progress play so kill/background doesn't wipe progress
+  useEffect(() => {
+    if (phase !== "ready" && phase !== "playing" && phase !== "rest") {
+      return;
+    }
+    if (!favorites.length) return;
+    const t = setTimeout(() => {
+      saveActivePlaySession({
+        phase,
+        currentIndex,
+        timer,
+        isActive,
+        sessionVolume,
+        sessionTension,
+        sets,
+        type: String(type),
+        favorites: favorites.map((ex) => ({
+          id: ex.id,
+          name: ex.name,
+          gifUrl: ex.gifUrl ?? "",
+          equipment: ex.equipment ?? "",
+          bodyPart: ex.bodyPart ?? "",
+          targetWeight: ex.targetWeight ?? null,
+          targetReps: ex.targetReps ?? null,
+        })),
+      }).catch(() => {});
+    }, 200);
+    return () => clearTimeout(t);
+  }, [
+    phase,
+    currentIndex,
+    timer,
+    isActive,
+    sessionVolume,
+    sessionTension,
+    sets,
+    type,
+    favorites,
+  ]);
+
+  // Flush resume snapshot + Home stats when leaving the app mid-workout
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state !== "background" && state !== "inactive") return;
+      saveIfLeavingActiveWorkout();
+      const p = phaseRef.current;
+      if (p !== "ready" && p !== "playing" && p !== "rest") return;
+      const favs = favoritesRef.current;
+      if (!favs.length) return;
+      saveActivePlaySession({
+        phase: p,
+        currentIndex: currentIndexRef.current,
+        timer,
+        isActive,
+        sessionVolume: sessionVolumeRef.current,
+        sessionTension: sessionTensionRef.current,
+        sets: setsRef.current,
+        type: String(typeRef.current),
+        favorites: favs.map((ex) => ({
+          id: ex.id,
+          name: ex.name,
+          gifUrl: ex.gifUrl ?? "",
+          equipment: ex.equipment ?? "",
+          bodyPart: ex.bodyPart ?? "",
+          targetWeight: ex.targetWeight ?? null,
+          targetReps: ex.targetReps ?? null,
+        })),
+      }).catch(() => {});
+    });
+    return () => sub.remove();
+  }, [timer, isActive]);
+
+  // Switching tabs away from Play (common) — tabs often stay mounted
+  useEffect(() => {
+    const unsubBlur = nav.addListener("blur", () => {
+      saveIfLeavingActiveWorkout();
+    });
+    return unsubBlur;
+  }, [nav]);
 
   useEffect(() => {
     let interval: ReturnType<typeof setInterval> | null = null;
@@ -129,23 +383,16 @@ const PlayWorkoutScreen = ({ route }: any) => {
     }
   }, [timer, phase, currentIndex, finalWorkout.length]);
 
+  // Home stats when "Great job" appears
   useEffect(() => {
     if (phase !== "done") return;
-    const uniqueNames = [
-      ...new Set(favorites.map((f) => f.name.replace(/\(Male\)/i, "").trim())),
-    ];
-    recordLastSession({
-      exerciseCount: favorites.length,
-      sets,
-      type: String(type),
-      names: uniqueNames,
-      volumeLoad: sessionVolume,
-      tensionSeconds: sessionTension,
-    }).catch(() => {});
+    void saveSessionToHome("complete");
   }, [phase]);
 
   const beginReady = () => {
     if (!favorites.length) return;
+    sessionCommittedRef.current = false;
+    earlySavedRef.current = false;
     setCurrentIndex(0);
     setTimer(45);
     setIsActive(true);
@@ -155,6 +402,7 @@ const PlayWorkoutScreen = ({ route }: any) => {
   };
 
   const resetToIdle = () => {
+    clearActivePlaySession().catch(() => {});
     setIsActive(false);
     setCurrentIndex(0);
     setTimer(45);
@@ -168,9 +416,23 @@ const PlayWorkoutScreen = ({ route }: any) => {
       resetToIdle();
       return;
     }
-    Alert.alert("End workout?", "You'll go back to Play — vibes and Start.", [
+    if (phase === "done") {
+      resetToIdle();
+      return;
+    }
+    Alert.alert("End workout?", "Save this session to Home and exit.", [
       { text: "Keep going", style: "cancel" },
-      { text: "End", style: "destructive", onPress: resetToIdle },
+      {
+        text: "End",
+        style: "destructive",
+        onPress: () => {
+          void (async () => {
+            await saveSessionToHome("early");
+            sessionCommittedRef.current = true;
+            resetToIdle();
+          })();
+        },
+      },
     ]);
   };
 
@@ -279,7 +541,14 @@ const PlayWorkoutScreen = ({ route }: any) => {
         >
           {phase === "idle" && (
             <View style={styles.idle}>
-              <Text style={styles.idleTitle}>Play</Text>
+              <Text
+                style={[
+                  styles.idleTitle,
+                  layout.isCompact && { fontSize: layout.font.hero },
+                ]}
+              >
+                Play
+              </Text>
               {layoutToggle}
               {favorites.length ? (
                 <>
@@ -293,10 +562,13 @@ const PlayWorkoutScreen = ({ route }: any) => {
                       : "List — scroll the queue and tap any step."}
                   </Text>
                   {idleQueuePreview}
+                  {/* Spotify paused — reclaim space until wired up
                   <SpotifyVibePicker />
+                  */}
                   <GradientCTA
                     title="Start Workout"
                     onPress={beginReady}
+                    compact={layout.isCompact}
                     style={styles.idleCta}
                   />
                 </>
@@ -306,11 +578,14 @@ const PlayWorkoutScreen = ({ route }: any) => {
                   <Text style={styles.idleHint}>
                     Build a queue in My Workout, then hit Start.
                   </Text>
+                  {/* Spotify paused — reclaim space until wired up
                   <SpotifyVibePicker />
+                  */}
                   <GradientCTA
                     title="My Workout"
                     icon="barbell-outline"
                     onPress={() => nav.navigate("My Workout")}
+                    compact={layout.isCompact}
                     style={styles.idleCta}
                   />
                 </>
@@ -319,7 +594,12 @@ const PlayWorkoutScreen = ({ route }: any) => {
           )}
 
           {phase === "ready" && (
-            <View style={styles.centerBlock}>
+            <View
+              style={[
+                styles.centerBlock,
+                { paddingTop: layout.readyTopPad as any },
+              ]}
+            >
               <Pressable
                 onPress={endSession}
                 style={[styles.endBtn, { top: 8 }]}
@@ -328,13 +608,25 @@ const PlayWorkoutScreen = ({ route }: any) => {
                 <Text style={styles.endBtnText}>End</Text>
               </Pressable>
               {layoutToggle}
-              <Text style={styles.phaseTitle}>Get Ready!</Text>
+              <Text
+                style={[
+                  styles.phaseTitle,
+                  layout.isCompact && { fontSize: layout.font.title },
+                ]}
+              >
+                Get Ready!
+              </Text>
               <CountDown time={5} onZero={handleInitiateWorkout} />
             </View>
           )}
 
           {phase === "rest" && currentIndex + 1 < finalWorkout.length && (
-            <View style={styles.centerBlock}>
+            <View
+              style={[
+                styles.centerBlock,
+                { paddingTop: layout.readyTopPad as any },
+              ]}
+            >
               <Pressable
                 onPress={endSession}
                 style={[styles.endBtn, { top: 8 }]}
@@ -343,7 +635,14 @@ const PlayWorkoutScreen = ({ route }: any) => {
                 <Text style={styles.endBtnText}>End</Text>
               </Pressable>
               {layoutToggle}
-              <Text style={styles.phaseTitle}>Rest...</Text>
+              <Text
+                style={[
+                  styles.phaseTitle,
+                  layout.isCompact && { fontSize: layout.font.title },
+                ]}
+              >
+                Rest...
+              </Text>
               <CountDown time={30} onZero={handleRest} />
               <View style={styles.upNext}>
                 <Text style={styles.upNextLabel}>Up next:</Text>
@@ -377,18 +676,48 @@ const PlayWorkoutScreen = ({ route }: any) => {
                   />
                 </View>
               </View>
-              <View style={styles.card}>
+              <View
+                style={[
+                  styles.card,
+                  {
+                    width: layout.width - (layout.isCompact ? 16 : 10),
+                    maxHeight: layout.playGifSize + (layout.isCompact ? 56 : 72),
+                  },
+                ]}
+              >
                 <ExerciseGif
                   key={current.id}
                   exerciseId={current.id}
-                  style={styles.imageFrame}
+                  style={[
+                    styles.imageFrame,
+                    {
+                      width: layout.playGifSize,
+                      height: layout.playGifSize,
+                      borderRadius: layout.isCompact ? 16 : 22,
+                      marginBottom: layout.isCompact ? 6 : 10,
+                    },
+                  ]}
                 />
-                <Text style={styles.name}>
+                <Text
+                  style={[
+                    styles.name,
+                    layout.isCompact && {
+                      fontSize: 14,
+                      paddingVertical: 4,
+                      paddingHorizontal: 10,
+                    },
+                  ]}
+                >
                   {current.name.replace(/\(Male\)/i, "")}
                 </Text>
               </View>
 
-              <View style={styles.controlsDock}>
+              <View
+                style={[
+                  styles.controlsDock,
+                  layout.isCompact && { paddingBottom: 4, paddingTop: 0 },
+                ]}
+              >
                 <WeightLogger
                   key={`${current.id}-${currentIndex}`}
                   exerciseId={current.id}
@@ -399,29 +728,55 @@ const PlayWorkoutScreen = ({ route }: any) => {
                   presetReps={(current as any).targetReps}
                   onLogged={(vol) => setSessionVolume((v) => v + vol)}
                 />
+                {/* Spotify paused — reclaim space until wired up
                 <SpotifyVibePicker compact />
+                */}
                 <View style={styles.timerRow}>
                   <NeomorphicButton
                     icon={"caret-back-outline"}
                     onPress={handleBack}
                     title="Back"
-                    extraButtonStyles={{ marginVertical: 8, padding: 4 }}
+                    extraButtonStyles={{
+                      marginVertical: layout.isCompact ? 4 : 8,
+                      padding: layout.isCompact ? 2 : 4,
+                    }}
                     extraTextStyles={{ color: Colors.primary }}
                   />
                   <View style={{ ...styles.timerBox, ...NeomorphicStyles }}>
                     <View style={styles.buttonContainer}>
                       <Pressable onPress={() => setIsActive((v) => !v)}>
-                        <Text style={styles.startBtn}>
+                        <Text
+                          style={[
+                            styles.startBtn,
+                            layout.isCompact && { padding: 5, borderWidth: 1.5 },
+                          ]}
+                        >
                           {isActive ? (
-                            <Ionicons size={40} name="pause" />
+                            <Ionicons
+                              size={layout.isCompact ? 28 : 40}
+                              name="pause"
+                            />
                           ) : (
-                            <Ionicons size={40} name="play" />
+                            <Ionicons
+                              size={layout.isCompact ? 28 : 40}
+                              name="play"
+                            />
                           )}
                         </Text>
                       </Pressable>
                     </View>
                     <View>
-                      <Text style={styles.counter}>00:{timerLabel}</Text>
+                      <Text
+                        style={[
+                          styles.counter,
+                          layout.isCompact && {
+                            fontSize: layout.font.timer,
+                            marginLeft: 10,
+                          },
+                        ]}
+                      >
+                        00:{timerLabel}
+                      </Text>
                       <View style={styles.timerActions}>
                         <Pressable
                           onPress={() => {
@@ -442,7 +797,10 @@ const PlayWorkoutScreen = ({ route }: any) => {
                     icon={"caret-forward-outline"}
                     onPress={handleNext}
                     title="Next"
-                    extraButtonStyles={{ marginVertical: 8, padding: 7 }}
+                    extraButtonStyles={{
+                      marginVertical: layout.isCompact ? 4 : 8,
+                      padding: layout.isCompact ? 4 : 7,
+                    }}
                     extraTextStyles={{ color: Colors.primary }}
                   />
                 </View>
@@ -451,18 +809,74 @@ const PlayWorkoutScreen = ({ route }: any) => {
           )}
 
           {phase === "done" && (
-            <View style={styles.doneBlock}>
+            <View
+              style={[
+                styles.doneBlock,
+                layout.isCompact && { paddingTop: 28, paddingHorizontal: 16 },
+              ]}
+            >
               <NeomorphicView>
                 <Image
                   source={img}
-                  style={{ height: 160, width: 160, alignSelf: "center" }}
+                  style={{
+                    height: layout.isCompact ? 110 : 160,
+                    width: layout.isCompact ? 110 : 160,
+                    alignSelf: "center",
+                  }}
                 />
-                <Text style={styles.doneText}>Great job — you got it done!</Text>
+                <Text
+                  style={[
+                    styles.doneText,
+                    layout.isCompact && { fontSize: 20, paddingTop: 8 },
+                  ]}
+                >
+                  Great job — you got it done!
+                </Text>
+                {(() => {
+                  const cals = estimateCaloriesBurned({
+                    tensionSeconds: sessionTension,
+                    volumeLoad: sessionVolume,
+                  });
+                  return (
+                    <View style={styles.doneStats}>
+                      {/* Total lifted — keep for later
+                      <View style={styles.doneStat}>
+                        <Text style={styles.doneStatValue}>
+                          {sessionVolume > 0
+                            ? formatVolumeLabel(sessionVolume)
+                            : "—"}
+                        </Text>
+                        <Text style={styles.doneStatLabel}>total lifted</Text>
+                      </View>
+                      <View style={styles.doneStatDivider} />
+                      */}
+                      <View style={styles.doneStat}>
+                        <Text style={styles.doneStatValue}>
+                          {sessionTension > 0
+                            ? formatTension(sessionTension)
+                            : "—"}
+                        </Text>
+                        <Text style={styles.doneStatLabel}>work time</Text>
+                      </View>
+                      <View style={styles.doneStatDivider} />
+                      <View style={styles.doneStat}>
+                        <Text style={styles.doneStatValue}>
+                          {cals > 0 ? formatCaloriesEst(cals) : "—"}
+                        </Text>
+                        <Text style={styles.doneStatLabel}>cal est.</Text>
+                      </View>
+                    </View>
+                  );
+                })()}
+                <Text style={styles.doneCalHint}>
+                  Rough estimate from work time (assumes ~170 lb). Not medical advice.
+                </Text>
                 <GradientCTA
                   title="Back to Play"
                   icon="musical-notes"
                   onPress={resetToIdle}
-                  style={{ marginTop: 16 }}
+                  compact={layout.isCompact}
+                  style={{ marginTop: layout.isCompact ? 12 : 16 }}
                 />
               </NeomorphicView>
             </View>
@@ -501,8 +915,8 @@ const styles = StyleSheet.create({
   },
   idle: {
     flex: 1,
-    paddingHorizontal: 24,
-    paddingTop: 16,
+    paddingHorizontal: 16,
+    paddingTop: 12,
     alignItems: "center",
   },
   idleTitle: {
@@ -513,18 +927,18 @@ const styles = StyleSheet.create({
   },
   idleSub: {
     color: "#fff",
-    fontSize: 16,
-    marginTop: 10,
+    fontSize: 15,
+    marginTop: 8,
     textAlign: "center",
   },
   idleHint: {
     color: Colors.textMuted,
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 13,
+    lineHeight: 18,
     textAlign: "center",
-    marginTop: 10,
-    marginBottom: 16,
-    paddingHorizontal: 12,
+    marginTop: 8,
+    marginBottom: 12,
+    paddingHorizontal: 8,
   },
   idleCta: {
     alignSelf: "stretch",
@@ -533,8 +947,8 @@ const styles = StyleSheet.create({
     alignSelf: "stretch",
     ...Theme.raised,
     borderRadius: Theme.radius.lg,
-    padding: 14,
-    marginBottom: 20,
+    padding: 12,
+    marginBottom: 16,
   },
   queueTitle: {
     color: Colors.textMuted,
@@ -575,19 +989,19 @@ const styles = StyleSheet.create({
   centerBlock: {
     alignItems: "center",
     paddingTop: "28%",
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
   },
   endBtn: {
     position: "absolute",
-    top: 16,
-    right: 20,
+    top: 12,
+    right: 16,
     zIndex: 2,
-    paddingVertical: 6,
+    paddingVertical: 4,
     paddingHorizontal: 4,
   },
   endBtnText: {
     color: Colors.textMuted,
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "600",
   },
   phaseTitle: {
@@ -606,21 +1020,20 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "center",
-    marginTop: 24,
+    marginTop: 16,
     gap: 6,
   },
   upNextLabel: {
     color: Colors.glowPurple,
-    fontSize: 20,
+    fontSize: 16,
   },
   upNextName: {
     color: Colors.glowCyan,
-    fontSize: 20,
+    fontSize: 16,
     textTransform: "capitalize",
   },
   playLayout: {
     flex: 1,
-    minHeight: Dimensions.get("window").height - 120,
   },
   controlsDock: {
     paddingBottom: 12,
@@ -634,12 +1047,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   card: {
-    flex: 1,
-    width: SCREEN_WIDTH - 10,
+    flexGrow: 0,
     alignSelf: "center",
     marginHorizontal: 5,
     marginBottom: 4,
-    maxHeight: SCREEN_WIDTH * 1.05,
     ...Theme.raised,
     borderRadius: Theme.radius.lg,
     backgroundColor: Colors.glowCyanDim,
@@ -648,12 +1059,10 @@ const styles = StyleSheet.create({
     ...Theme.glow.cyan,
     overflow: "visible",
     justifyContent: "center",
-    paddingVertical: 8,
+    paddingVertical: 6,
   },
   imageFrame: {
     alignSelf: "center",
-    width: SCREEN_WIDTH * 0.9,
-    height: SCREEN_WIDTH * 0.9,
     borderRadius: 22,
     marginBottom: 10,
     marginTop: 4,
@@ -669,7 +1078,7 @@ const styles = StyleSheet.create({
   },
   timerBox: {
     ...Theme.inset,
-    padding: 12,
+    padding: 10,
     alignItems: "center",
     borderRadius: Theme.radius.md,
     margin: 4,
@@ -746,6 +1155,44 @@ const styles = StyleSheet.create({
     fontFamily: DISPLAY_FONT,
     fontSize: 24,
     textAlign: "center",
+  },
+  doneStats: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 18,
+    gap: 8,
+  },
+  doneStat: {
+    alignItems: "center",
+    flex: 1,
+    minWidth: 0,
+  },
+  doneStatValue: {
+    fontFamily: DISPLAY_FONT,
+    fontSize: 26,
+    color: "#fff",
+    letterSpacing: 0.5,
+  },
+  doneStatLabel: {
+    color: Colors.textMuted,
+    fontSize: 12,
+    marginTop: 2,
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+  },
+  doneStatDivider: {
+    width: 1,
+    height: 36,
+    backgroundColor: Colors.highlight,
+  },
+  doneCalHint: {
+    color: Colors.textMuted,
+    fontSize: 11,
+    lineHeight: 15,
+    textAlign: "center",
+    marginTop: 12,
+    paddingHorizontal: 12,
   },
   doneBlock: {
     alignItems: "center",

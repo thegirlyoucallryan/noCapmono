@@ -8,7 +8,7 @@ import fitness from "../assets/fitness.png";
 import { Image } from "react-native";
 
 const Message = () => {
-  const nav = useNavigation();
+  const nav = useNavigation<any>();
 
   return (
     <View style={styles.screen}>
@@ -22,9 +22,7 @@ const Message = () => {
         <GradientCTA
           title="Go to Build"
           icon="hammer-outline"
-          onPress={() =>
-            nav.navigate("Build" as never, { screen: "BuildHome" } as never)
-          }
+          onPress={() => nav.navigate("Build", { screen: "BuildHome" })}
           style={styles.cta}
         />
       </RaisedCard>

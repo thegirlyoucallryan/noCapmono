@@ -3,12 +3,14 @@ import { Exercise } from "../src/types/types";
 import { supabase } from "./supabase";
 import {
   saveWorkout as cloudSaveWorkout,
+  updateWorkout as cloudUpdateWorkout,
   listWorkouts as cloudListWorkouts,
   getWorkout as cloudGetWorkout,
   deleteWorkout as cloudDeleteWorkout,
   logExercise as cloudLogExercise,
   getLastLog as cloudGetLastLog,
   getMaxWeight as cloudGetMaxWeight,
+  listWeightedLogs as cloudListWeightedLogs,
   SavedWorkout,
   ExerciseLog,
 } from "./workoutApi";
@@ -98,6 +100,38 @@ function newId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
+function normalizeWorkoutName(name: string) {
+  return name.trim().toLowerCase();
+}
+
+function mapExercisesToLocal(exercises: Exercise[]) {
+  return exercises.map((ex, index) => ({
+    exercise_id: ex.id,
+    exercise_name: ex.name,
+    body_part: ex.bodyPart ?? null,
+    equipment: ex.equipment ?? null,
+    sort_order: index,
+    target_weight: ex.targetWeight ?? null,
+    target_reps: ex.targetReps ?? null,
+  }));
+}
+
+/** True if another saved workout already uses this name (case-insensitive). */
+export async function isWorkoutNameTaken(
+  name: string,
+  excludeId?: string | null
+): Promise<boolean> {
+  const needle = normalizeWorkoutName(name);
+  if (!needle) return false;
+
+  const all = await listSavedWorkouts();
+  return all.some(
+    (w) =>
+      normalizeWorkoutName(w.name) === needle &&
+      (!excludeId || w.id !== excludeId)
+  );
+}
+
 /** Save current queue as a named workout (local always; cloud if signed in) */
 export async function saveNamedWorkout(
   name: string,
@@ -106,6 +140,9 @@ export async function saveNamedWorkout(
   const trimmed = name.trim();
   if (!trimmed) throw new Error("Name required");
   if (!exercises.length) throw new Error("Add exercises first");
+  if (await isWorkoutNameTaken(trimmed)) {
+    throw new Error("That name is already used");
+  }
 
   const now = new Date().toISOString();
   const local: LocalWorkout = {
@@ -113,15 +150,7 @@ export async function saveNamedWorkout(
     name: trimmed,
     created_at: now,
     updated_at: now,
-    exercises: exercises.map((ex, index) => ({
-      exercise_id: ex.id,
-      exercise_name: ex.name,
-      body_part: ex.bodyPart ?? null,
-      equipment: ex.equipment ?? null,
-      sort_order: index,
-      target_weight: ex.targetWeight ?? null,
-      target_reps: ex.targetReps ?? null,
-    })),
+    exercises: mapExercisesToLocal(exercises),
   };
 
   const all = await readLocalWorkouts();
@@ -147,6 +176,56 @@ export async function saveNamedWorkout(
   }
 
   return { id: local.id, synced };
+}
+
+/** Overwrite an existing saved workout (local + cloud when signed in). */
+export async function updateNamedWorkout(
+  workoutId: string,
+  name: string,
+  exercises: Exercise[]
+): Promise<{ id: string; synced: boolean }> {
+  const trimmed = name.trim();
+  if (!trimmed) throw new Error("Name required");
+  if (!exercises.length) throw new Error("Add exercises first");
+  if (await isWorkoutNameTaken(trimmed, workoutId)) {
+    throw new Error("That name is already used");
+  }
+
+  const now = new Date().toISOString();
+  const all = await readLocalWorkouts();
+  const idx = all.findIndex((w) => w.id === workoutId);
+  if (idx >= 0) {
+    all[idx] = {
+      ...all[idx],
+      name: trimmed,
+      updated_at: now,
+      exercises: mapExercisesToLocal(exercises),
+    };
+    await writeLocalWorkouts(all);
+  } else {
+    // Cloud-only id (local cache missing) — keep a local mirror
+    all.unshift({
+      id: workoutId,
+      name: trimmed,
+      created_at: now,
+      updated_at: now,
+      exercises: mapExercisesToLocal(exercises),
+    });
+    await writeLocalWorkouts(all);
+  }
+
+  let synced = false;
+  const userId = await getSessionUserId();
+  if (userId) {
+    try {
+      await cloudUpdateWorkout(workoutId, trimmed, exercises);
+      synced = true;
+    } catch (e) {
+      console.warn("Cloud update failed, kept local:", e);
+    }
+  }
+
+  return { id: workoutId, synced };
 }
 
 export async function listSavedWorkouts(): Promise<SavedWorkout[]> {
@@ -310,9 +389,14 @@ export type LastSession = {
   names: string[];
   volumeLoad?: number;
   tensionSeconds?: number;
+  /** Rough estimate from work time (+ light volume bump) */
+  caloriesEst?: number;
 };
 
-export async function recordLastSession(session: Omit<LastSession, "at">) {
+export async function recordLastSession(
+  session: Omit<LastSession, "at">,
+  opts?: { replaceLatest?: boolean }
+) {
   const userId = await getSessionUserId();
   const payload: LastSession = {
     ...session,
@@ -327,7 +411,13 @@ export async function recordLastSession(session: Omit<LastSession, "at">) {
     const historyKey = storageKey(userId, "session_history");
     const raw = await AsyncStorage.getItem(historyKey);
     const prev: LastSession[] = raw ? JSON.parse(raw) : [];
-    prev.unshift(payload);
+    if (opts?.replaceLatest && prev.length > 0) {
+      // Keep original start time so the session doesn't look brand-new
+      payload.at = prev[0].at || payload.at;
+      prev[0] = payload;
+    } else {
+      prev.unshift(payload);
+    }
     await AsyncStorage.setItem(historyKey, JSON.stringify(prev.slice(0, 16)));
   } catch {
     /* ignore */
@@ -336,9 +426,23 @@ export async function recordLastSession(session: Omit<LastSession, "at">) {
   return payload;
 }
 
-export async function getLastSession(): Promise<LastSession | null> {
+async function readScopedOrGuest(leaf: string): Promise<string | null> {
   const userId = await getSessionUserId();
-  const raw = await AsyncStorage.getItem(storageKey(userId, "last_session"));
+  const scoped = await AsyncStorage.getItem(storageKey(userId, leaf));
+  if (scoped) return scoped;
+  // Session may have been written before auth resolved (guest key)
+  if (userId) {
+    const guest = await AsyncStorage.getItem(storageKey(null, leaf));
+    if (guest) {
+      await AsyncStorage.setItem(storageKey(userId, leaf), guest);
+      return guest;
+    }
+  }
+  return null;
+}
+
+export async function getLastSession(): Promise<LastSession | null> {
+  const raw = await readScopedOrGuest("last_session");
   if (!raw) return null;
   try {
     return JSON.parse(raw) as LastSession;
@@ -348,8 +452,7 @@ export async function getLastSession(): Promise<LastSession | null> {
 }
 
 export async function getSessionHistory(limit = 8): Promise<LastSession[]> {
-  const userId = await getSessionUserId();
-  const raw = await AsyncStorage.getItem(storageKey(userId, "session_history"));
+  const raw = await readScopedOrGuest("session_history");
   if (!raw) {
     const last = await getLastSession();
     return last ? [last] : [];
@@ -360,6 +463,115 @@ export async function getSessionHistory(limit = 8): Promise<LastSession[]> {
   } catch {
     return [];
   }
+}
+
+/** My Workout queue — survives app kill */
+export type PersistedWorkoutExercise = {
+  id: string;
+  name: string;
+  gifUrl?: string;
+  equipment?: string;
+  bodyPart?: string;
+  targetWeight?: number | null;
+  targetReps?: number | null;
+};
+
+export async function saveCurrentWorkoutQueue(
+  exercises: PersistedWorkoutExercise[],
+  meta?: {
+    sets?: number;
+    workoutType?: string;
+    name?: string | null;
+    workoutId?: string | null;
+  }
+) {
+  const userId = await getSessionUserId();
+  await AsyncStorage.setItem(
+    storageKey(userId, "current_workout"),
+    JSON.stringify({
+      exercises,
+      sets: meta?.sets ?? 4,
+      workoutType: meta?.workoutType ?? "Circuit",
+      name: meta?.name ?? null,
+      workoutId: meta?.workoutId ?? null,
+      updatedAt: new Date().toISOString(),
+    })
+  );
+}
+
+export async function loadCurrentWorkoutQueue(): Promise<{
+  exercises: PersistedWorkoutExercise[];
+  sets: number;
+  workoutType: string;
+  name: string | null;
+  workoutId: string | null;
+} | null> {
+  const userId = await getSessionUserId();
+  const raw = await AsyncStorage.getItem(storageKey(userId, "current_workout"));
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed?.exercises)) return null;
+    return {
+      exercises: parsed.exercises,
+      sets: typeof parsed.sets === "number" ? parsed.sets : 4,
+      workoutType: parsed.workoutType ?? "Circuit",
+      name: parsed.name ?? null,
+      workoutId: parsed.workoutId ?? null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function clearCurrentWorkoutQueue() {
+  const userId = await getSessionUserId();
+  await AsyncStorage.removeItem(storageKey(userId, "current_workout"));
+}
+
+/** In-progress Play session — resume after lock/kill */
+export type ActivePlaySession = {
+  phase: "ready" | "playing" | "rest";
+  currentIndex: number;
+  timer: number;
+  isActive: boolean;
+  sessionVolume: number;
+  sessionTension: number;
+  sets: number;
+  type: string;
+  favorites: PersistedWorkoutExercise[];
+  updatedAt: string;
+};
+
+export async function saveActivePlaySession(session: Omit<ActivePlaySession, "updatedAt">) {
+  const userId = await getSessionUserId();
+  await AsyncStorage.setItem(
+    storageKey(userId, "active_play"),
+    JSON.stringify({ ...session, updatedAt: new Date().toISOString() })
+  );
+}
+
+export async function loadActivePlaySession(): Promise<ActivePlaySession | null> {
+  const userId = await getSessionUserId();
+  const raw = await AsyncStorage.getItem(storageKey(userId, "active_play"));
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as ActivePlaySession;
+    if (
+      !parsed?.favorites?.length ||
+      !["ready", "playing", "rest"].includes(parsed.phase)
+    ) {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+export async function clearActivePlaySession() {
+  const userId = await getSessionUserId();
+  await AsyncStorage.removeItem(storageKey(userId, "active_play"));
 }
 
 export type LiftMax = {
@@ -388,8 +600,44 @@ export async function getExerciseHistory(
     }));
 }
 
+async function logsForMaxes(): Promise<LocalLog[]> {
+  const local = await readLocalLogs();
+  const userId = await getSessionUserId();
+  if (!userId) return local;
+
+  try {
+    const cloud = await cloudListWeightedLogs(400);
+    const byId = new Map<string, LocalLog>();
+    for (const log of local) {
+      byId.set(log.id, log);
+    }
+    for (const log of cloud) {
+      if (log.weight == null) continue;
+      byId.set(log.id, {
+        id: log.id,
+        exercise_id: log.exercise_id,
+        exercise_name: log.exercise_name,
+        weight: log.weight,
+        reps: log.reps,
+        sets: log.sets,
+        performed_at: log.performed_at,
+      });
+    }
+    const merged = [...byId.values()].sort(
+      (a, b) =>
+        new Date(b.performed_at).getTime() - new Date(a.performed_at).getTime()
+    );
+    // Keep device cache warm so Home still works offline next time.
+    await writeLocalLogs(merged.slice(0, 500));
+    return merged;
+  } catch (e) {
+    console.warn("Cloud maxes sync failed:", e);
+    return local;
+  }
+}
+
 export async function getTopMaxes(limit = 5): Promise<LiftMax[]> {
-  const logs = await readLocalLogs();
+  const logs = await logsForMaxes();
   const byExercise = new Map<string, LocalLog[]>();
 
   for (const log of logs) {
@@ -490,6 +738,34 @@ export function formatTension(seconds: number) {
   const s = seconds % 60;
   if (m <= 0) return `${s}s`;
   return `${m}m ${String(s).padStart(2, "0")}s`;
+}
+
+/**
+ * Rough session calorie estimate (not medical-grade).
+ * MET × kg × hours for work-timer seconds, plus a small lift-volume bump.
+ * Default body weight 170 lb until we collect one on profile.
+ */
+export function estimateCaloriesBurned(input: {
+  tensionSeconds?: number | null;
+  volumeLoad?: number | null;
+  bodyWeightLb?: number | null;
+}): number {
+  const seconds = Math.max(0, Number(input.tensionSeconds) || 0);
+  const volume = Math.max(0, Number(input.volumeLoad) || 0);
+  const lb = Math.max(90, Number(input.bodyWeightLb) || 170);
+  const kg = lb * 0.453592;
+  const hours = seconds / 3600;
+  // Strength / circuit work while the exercise timer is running
+  const MET = 5.0;
+  const fromTime = MET * kg * hours;
+  // Tiny bonus so logging weight still nudges the number
+  const fromVolume = volume > 0 ? volume / 2500 : 0;
+  return Math.max(0, Math.round(fromTime + fromVolume));
+}
+
+export function formatCaloriesEst(n: number) {
+  if (!n || n <= 0) return "—";
+  return `~${Math.round(n)}`;
 }
 
 export function formatVolume(n: number) {

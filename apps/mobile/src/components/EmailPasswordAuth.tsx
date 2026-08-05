@@ -8,39 +8,40 @@ import {
   Alert,
   ActivityIndicator,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import Colors from "../constants/Colors";
 import { supabase } from "../../utils/supabase";
-import {
-  acceptLegal,
-  markLegalPending,
-} from "../../utils/workoutApi";
-
-type Props = {
-  disabled?: boolean;
-};
+import { acceptLegal, markLegalPending } from "../../utils/workoutApi";
+import { TERMS_VERSION, PRIVACY_VERSION } from "../constants/Legal";
 
 type Mode = "signin" | "signup";
 
-export function EmailPasswordAuth({ disabled = false }: Props) {
+type Props = {
+  onOpenTerms: () => void;
+  onOpenPrivacy: () => void;
+};
+
+export function EmailPasswordAuth({ onOpenTerms, onOpenPrivacy }: Props) {
   const [mode, setMode] = useState<Mode>("signin");
+  const [agreed, setAgreed] = useState(false);
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const requireAgreed = () => {
-    if (disabled) {
-      Alert.alert(
-        "Agree first",
-        "Please accept the Terms & Privacy Policy to continue."
-      );
-      return false;
-    }
-    return true;
+  const switchMode = (next: Mode) => {
+    setMode(next);
+    if (next === "signin") setAgreed(false);
   };
 
   const onSubmit = async () => {
-    if (!requireAgreed()) return;
+    if (mode === "signup" && !agreed) {
+      Alert.alert(
+        "Agree first",
+        "Please accept the Terms & Privacy Policy to create an account."
+      );
+      return;
+    }
 
     const e = email.trim().toLowerCase();
     const p = password;
@@ -61,9 +62,8 @@ export function EmailPasswordAuth({ disabled = false }: Props) {
 
     setBusy(true);
     try {
-      await markLegalPending();
-
       if (mode === "signup") {
+        await markLegalPending();
         const { data, error } = await supabase.auth.signUp({
           email: e,
           password: p,
@@ -88,21 +88,17 @@ export function EmailPasswordAuth({ disabled = false }: Props) {
             "Confirm your email",
             "Open the link in the email (ignore any localhost error — your account is still confirmed). Then come back here and tap Sign in."
           );
-          setMode("signin");
+          switchMode("signin");
         }
         return;
       }
 
-      const { data, error } = await supabase.auth.signInWithPassword({
+      const { error } = await supabase.auth.signInWithPassword({
         email: e,
         password: p,
       });
       if (error) {
         Alert.alert("Sign in failed", error.message);
-        return;
-      }
-      if (data.session) {
-        await acceptLegal();
       }
     } catch (err: any) {
       Alert.alert("Error", err?.message ?? "Something went wrong.");
@@ -126,10 +122,10 @@ export function EmailPasswordAuth({ disabled = false }: Props) {
   };
 
   return (
-    <View style={[styles.wrap, disabled && styles.dimmed]}>
+    <View style={styles.wrap}>
       <View style={styles.tabs}>
         <Pressable
-          onPress={() => setMode("signin")}
+          onPress={() => switchMode("signin")}
           style={[styles.tab, mode === "signin" && styles.tabOn]}
         >
           <Text style={[styles.tabText, mode === "signin" && styles.tabTextOn]}>
@@ -137,7 +133,7 @@ export function EmailPasswordAuth({ disabled = false }: Props) {
           </Text>
         </Pressable>
         <Pressable
-          onPress={() => setMode("signup")}
+          onPress={() => switchMode("signup")}
           style={[styles.tab, mode === "signup" && styles.tabOn]}
         >
           <Text style={[styles.tabText, mode === "signup" && styles.tabTextOn]}>
@@ -155,7 +151,7 @@ export function EmailPasswordAuth({ disabled = false }: Props) {
           placeholderTextColor={Colors.textMuted}
           autoCapitalize="none"
           autoCorrect={false}
-          editable={!disabled && !busy}
+          editable={!busy}
         />
       ) : null}
 
@@ -168,7 +164,7 @@ export function EmailPasswordAuth({ disabled = false }: Props) {
         keyboardType="email-address"
         autoCapitalize="none"
         autoCorrect={false}
-        editable={!disabled && !busy}
+        editable={!busy}
       />
       <TextInput
         style={styles.input}
@@ -177,16 +173,50 @@ export function EmailPasswordAuth({ disabled = false }: Props) {
         placeholder="Password"
         placeholderTextColor={Colors.textMuted}
         secureTextEntry
-        editable={!disabled && !busy}
+        editable={!busy}
       />
+
+      {mode === "signup" ? (
+        <View style={styles.legalBox}>
+          <Pressable
+            onPress={() => setAgreed((v) => !v)}
+            style={styles.checkRow}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: agreed }}
+          >
+            <View style={[styles.checkbox, agreed && styles.checkboxOn]}>
+              {agreed ? (
+                <Ionicons name="checkmark" size={16} color={Colors.twentyThree} />
+              ) : null}
+            </View>
+            <Text style={styles.legalText}>
+              I agree to the{" "}
+              <Text style={styles.link} onPress={onOpenTerms}>
+                Terms
+              </Text>
+              {" & "}
+              <Text style={styles.link} onPress={onOpenPrivacy}>
+                Privacy Policy
+              </Text>
+              , including the liability waiver.
+            </Text>
+          </Pressable>
+          <Text style={styles.versionHint}>
+            Docs v{TERMS_VERSION} / {PRIVACY_VERSION}
+          </Text>
+        </View>
+      ) : null}
 
       <Pressable
         onPress={onSubmit}
-        disabled={busy}
+        disabled={busy || (mode === "signup" && !agreed)}
         style={({ pressed }) => [
           styles.submit,
-          (disabled || busy) && styles.submitDisabled,
-          pressed && !disabled && !busy && styles.pressed,
+          (busy || (mode === "signup" && !agreed)) && styles.submitDisabled,
+          pressed &&
+            !busy &&
+            !(mode === "signup" && !agreed) &&
+            styles.pressed,
         ]}
       >
         {busy ? (
@@ -215,9 +245,6 @@ const styles = StyleSheet.create({
   wrap: {
     width: "100%",
     marginBottom: 16,
-  },
-  dimmed: {
-    opacity: 0.45,
   },
   tabs: {
     flexDirection: "row",
@@ -256,6 +283,53 @@ const styles = StyleSheet.create({
     paddingVertical: 13,
     fontSize: 16,
     marginBottom: 10,
+  },
+  legalBox: {
+    width: "100%",
+    backgroundColor: Colors.surface,
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderTopColor: Colors.highlight,
+    borderLeftColor: Colors.highlight,
+    borderBottomColor: Colors.shadowDark,
+    borderRightColor: Colors.shadowDark,
+    marginBottom: 12,
+  },
+  checkRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+  },
+  checkbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: Colors.textMuted,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 2,
+  },
+  checkboxOn: {
+    backgroundColor: Colors.accent,
+    borderColor: Colors.accent,
+  },
+  legalText: {
+    flex: 1,
+    color: "#ddd",
+    fontSize: 14,
+    lineHeight: 21,
+  },
+  link: {
+    color: Colors.accent,
+    fontWeight: "700",
+    textDecorationLine: "underline",
+  },
+  versionHint: {
+    color: Colors.textMuted,
+    fontSize: 11,
+    marginTop: 10,
   },
   submit: {
     backgroundColor: Colors.accent,

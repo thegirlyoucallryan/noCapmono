@@ -7,30 +7,48 @@ import {
   ScrollView,
   RefreshControl,
   Modal,
+  Alert,
+  ActivityIndicator,
+  Linking,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
-import { useDispatch } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 import { Ionicons } from "@expo/vector-icons";
 import Colors from "../constants/Colors";
 import { DISPLAY_FONT } from "../constants/Typography";
+import { LEGAL_CONTACT_EMAIL } from "../constants/TermsOfService";
+import {
+  PRIVACY_URL,
+  TERMS_URL,
+  DELETE_ACCOUNT_URL,
+} from "../constants/Legal";
 import { SmokyMountains } from "../components/SmokyMountains";
 import { RaisedCard } from "../components/RaisedCard";
 import { InsetWell } from "../components/InsetWell";
 import { GradientCTA } from "../components/GradientCTA";
 import { ProgressionChart } from "../components/ProgressionChart";
 import { BrandHeader } from "../components/BrandHeader";
+import { SavedWorkoutPreviewModal } from "../components/SavedWorkoutPreviewModal";
 import { setWorkout, clearFavorites } from "../store/actions";
 import {
   getHomeSummary,
   loadSavedWorkoutExercises,
+  removeSavedWorkout,
   formatTension,
-  formatVolumeLabel,
+  // formatVolumeLabel, // used with total lifted
+  formatCaloriesEst,
+  estimateCaloriesBurned,
   HomeSummary,
   LiftMax,
 } from "../../utils/workoutStore";
 import { supabase } from "../../utils/supabase";
 import { getDisplayName } from "../../utils/workoutApi";
+import {
+  clearAccountLocalData,
+  deleteAccount,
+} from "../../utils/accountApi";
+import type { SavedWorkout } from "../../utils/workoutApi";
 
 function formatWhen(iso: string) {
   const d = new Date(iso);
@@ -57,10 +75,18 @@ function shortDay(iso: string) {
 export default function DashboardScreen() {
   const nav = useNavigation<any>();
   const dispatch = useDispatch();
+  const loadedWorkoutId = useSelector(
+    (s: any) => s.favorites.loadedWorkoutId as string | null
+  );
   const [summary, setSummary] = useState<HomeSummary | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [focusLift, setFocusLift] = useState<LiftMax | null>(null);
   const [userName, setUserName] = useState<string | null>(null);
+  const [previewWorkout, setPreviewWorkout] = useState<SavedWorkout | null>(
+    null
+  );
+  const [deletingAccount, setDeletingAccount] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const load = useCallback(async () => {
     const data = await getHomeSummary();
@@ -97,11 +123,91 @@ export default function DashboardScreen() {
       value: Math.round(s.volumeLoad ?? 0),
       label: shortDay(s.at)}));
 
-  const loadSaved = async (id: string, name?: string) => {
-    const exercises = await loadSavedWorkoutExercises(id);
+  const loadSaved = async (w: SavedWorkout) => {
+    const exercises = await loadSavedWorkoutExercises(w.id);
     if (!exercises.length) return;
-    dispatch(setWorkout(exercises, name ?? null));
+    dispatch(setWorkout(exercises, w.name, w.id));
     nav.navigate("My Workout");
+  };
+
+  const deleteSaved = async (w: SavedWorkout) => {
+    await removeSavedWorkout(w.id);
+    if (loadedWorkoutId === w.id) {
+      dispatch(clearFavorites());
+    }
+    await load();
+  };
+
+  const openExternal = async (url: string) => {
+    setSettingsOpen(false);
+    try {
+      await Linking.openURL(url);
+    } catch {
+      Alert.alert("Couldn’t open link", url);
+    }
+  };
+
+  const signOut = async () => {
+    setSettingsOpen(false);
+    dispatch(clearFavorites());
+    await supabase.auth.signOut();
+  };
+
+  const runDeleteAccount = async () => {
+    if (deletingAccount) return;
+    setDeletingAccount(true);
+    setSettingsOpen(false);
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const userId = session?.user?.id ?? null;
+      await deleteAccount();
+      dispatch(clearFavorites());
+      await clearAccountLocalData(userId);
+      await supabase.auth.signOut();
+    } catch (e) {
+      const msg =
+        e instanceof Error ? e.message : "Something went wrong. Try again.";
+      Alert.alert(
+        "Couldn’t delete account",
+        `${msg}\n\nIf this keeps happening, email ${LEGAL_CONTACT_EMAIL}.`
+      );
+    } finally {
+      setDeletingAccount(false);
+    }
+  };
+
+  const confirmDeleteAccount = () => {
+    if (deletingAccount) return;
+    setSettingsOpen(false);
+    Alert.alert(
+      "Delete account?",
+      "This permanently deletes your account, workouts, lift logs, and profile. This cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Continue",
+          style: "destructive",
+          onPress: () => {
+            Alert.alert(
+              "Delete forever?",
+              "Your cloud data will be erased. Local app data for this account will be cleared too.",
+              [
+                { text: "Cancel", style: "cancel" },
+                {
+                  text: "Delete forever",
+                  style: "destructive",
+                  onPress: () => {
+                    void runDeleteAccount();
+                  },
+                },
+              ]
+            );
+          },
+        },
+      ]
+    );
   };
 
   return (
@@ -121,20 +227,32 @@ export default function DashboardScreen() {
           />
         }
       >
-        <BrandHeader
-          userName={userName}
-          subtitle="Your stats. Your climb."
-        />
-        <Pressable
-          onPress={async () => {
-            dispatch(clearFavorites());
-            await supabase.auth.signOut();
-          }}
-          style={styles.signOutBtn}
-          hitSlop={8}
-        >
-          <Text style={styles.signOutText}>Sign out</Text>
-        </Pressable>
+        <View style={styles.headerRow}>
+          <View style={styles.headerMain}>
+            <BrandHeader
+              userName={userName}
+              subtitle="Your stats. Your climb."
+            />
+          </View>
+          <Pressable
+            onPress={() => setSettingsOpen(true)}
+            style={styles.settingsBtn}
+            hitSlop={12}
+            accessibilityRole="button"
+            accessibilityLabel="Settings"
+            disabled={deletingAccount}
+          >
+            {deletingAccount ? (
+              <ActivityIndicator size="small" color={Colors.glowCyan} />
+            ) : (
+              <Ionicons
+                name="settings-outline"
+                size={22}
+                color={Colors.textSoft}
+              />
+            )}
+          </Pressable>
+        </View>
 
         <RaisedCard style={styles.heroCard}>
           <Text style={styles.sectionEyebrow}>Last session</Text>
@@ -147,6 +265,7 @@ export default function DashboardScreen() {
                 {last.type}
               </Text>
               <View style={styles.statRow}>
+                {/* Total lifted — keep for later
                 <InsetWell style={styles.statPill}>
                   <Text style={styles.statLabel}>Total lifted</Text>
                   <Text style={styles.statValue}>
@@ -156,6 +275,7 @@ export default function DashboardScreen() {
                   </Text>
                   <Text style={styles.statHint}>weight × reps, added up</Text>
                 </InsetWell>
+                */}
                 <InsetWell style={styles.statPill}>
                   <Text style={styles.statLabel}>Work time</Text>
                   <Text style={styles.statValue}>
@@ -165,7 +285,38 @@ export default function DashboardScreen() {
                   </Text>
                   <Text style={styles.statHint}>exercise timer, not rest</Text>
                 </InsetWell>
+                <InsetWell style={styles.statPill}>
+                  <Text style={styles.statLabel}>Calories (est.)</Text>
+                  <Text style={styles.statValue}>
+                    {(() => {
+                      const cals =
+                        last.caloriesEst != null && last.caloriesEst > 0
+                          ? last.caloriesEst
+                          : estimateCaloriesBurned({
+                              tensionSeconds: last.tensionSeconds,
+                              volumeLoad: last.volumeLoad,
+                            });
+                      return cals > 0 ? formatCaloriesEst(cals) : "—";
+                    })()}
+                  </Text>
+                  <Text style={styles.statHint}>
+                    From work time · assumes ~170 lb
+                  </Text>
+                </InsetWell>
               </View>
+              {/* calories were a separate row — now in the row above
+              {last.caloriesEst != null && last.caloriesEst > 0 ? (
+                <InsetWell style={styles.calPill}>
+                  <Text style={styles.statLabel}>Calories (est.)</Text>
+                  <Text style={styles.statValue}>
+                    {formatCaloriesEst(last.caloriesEst)}
+                  </Text>
+                  <Text style={styles.statHint}>
+                    From work time · assumes ~170 lb
+                  </Text>
+                </InsetWell>
+              ) : null}
+              */}
               {volumePoints.length >= 2 ? (
                 <View style={styles.inlineChart}>
                   <ProgressionChart
@@ -177,12 +328,21 @@ export default function DashboardScreen() {
                   />
                 </View>
               ) : null}
-              <GradientCTA
-                title="My Workout"
-                icon="barbell-outline"
+              <Pressable
                 onPress={() => nav.navigate("My Workout")}
-                style={styles.cta}
-              />
+                hitSlop={8}
+                style={({ pressed }) => [
+                  styles.myWorkoutLink,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Text style={styles.myWorkoutLinkText}>My Workout</Text>
+                <Ionicons
+                  name="chevron-forward"
+                  size={16}
+                  color={Colors.glowPurple}
+                />
+              </Pressable>
             </>
           ) : (
             <>
@@ -205,7 +365,7 @@ export default function DashboardScreen() {
           saved.slice(0, 6).map((w) => (
             <Pressable
               key={w.id}
-              onPress={() => loadSaved(w.id, w.name)}
+              onPress={() => setPreviewWorkout(w)}
               style={({ pressed }) => pressed && styles.pressed}
             >
               <RaisedCard style={styles.row}>
@@ -315,6 +475,103 @@ export default function DashboardScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      <SavedWorkoutPreviewModal
+        visible={!!previewWorkout}
+        workout={previewWorkout}
+        onClose={() => setPreviewWorkout(null)}
+        onLoad={loadSaved}
+        onDelete={deleteSaved}
+      />
+
+      <Modal
+        visible={settingsOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSettingsOpen(false)}
+      >
+        <Pressable
+          style={styles.settingsBg}
+          onPress={() => setSettingsOpen(false)}
+        >
+          <Pressable
+            style={styles.settingsSheet}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <View style={styles.settingsHeader}>
+              <Text style={styles.settingsTitle}>Settings</Text>
+              <Pressable
+                onPress={() => setSettingsOpen(false)}
+                hitSlop={10}
+                accessibilityRole="button"
+                accessibilityLabel="Close settings"
+              >
+                <Ionicons name="close" size={22} color={Colors.textMuted} />
+              </Pressable>
+            </View>
+
+            <Pressable
+              style={styles.settingsRow}
+              onPress={() => void signOut()}
+            >
+              <Ionicons
+                name="log-out-outline"
+                size={20}
+                color={Colors.textSoft}
+              />
+              <Text style={styles.settingsRowText}>Sign out</Text>
+            </Pressable>
+
+            <Pressable
+              style={styles.settingsRow}
+              onPress={() => void openExternal(PRIVACY_URL)}
+            >
+              <Ionicons
+                name="shield-checkmark-outline"
+                size={20}
+                color={Colors.textSoft}
+              />
+              <Text style={styles.settingsRowText}>Privacy Policy</Text>
+            </Pressable>
+
+            <Pressable
+              style={styles.settingsRow}
+              onPress={() => void openExternal(TERMS_URL)}
+            >
+              <Ionicons
+                name="document-text-outline"
+                size={20}
+                color={Colors.textSoft}
+              />
+              <Text style={styles.settingsRowText}>Terms & Conditions</Text>
+            </Pressable>
+
+            <Pressable
+              style={styles.settingsRow}
+              onPress={() => void openExternal(DELETE_ACCOUNT_URL)}
+            >
+              <Ionicons
+                name="help-circle-outline"
+                size={20}
+                color={Colors.textSoft}
+              />
+              <Text style={styles.settingsRowText}>Account deletion help</Text>
+            </Pressable>
+
+            <Pressable
+              style={[styles.settingsRow, styles.settingsRowDanger]}
+              onPress={confirmDeleteAccount}
+            >
+              <Ionicons
+                name="trash-outline"
+                size={20}
+                color={Colors.ctaEnd}
+              />
+              <Text style={styles.settingsRowDangerText}>Delete account</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -333,14 +590,82 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 40,
     paddingTop: 8},
-  signOutBtn: {
-    alignSelf: "flex-end",
-    marginTop: -12,
-    marginBottom: 12},
-  signOutText: {
-    color: Colors.textMuted,
-    fontSize: 13,
-    fontWeight: "600"},
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    marginBottom: 4,
+  },
+  headerMain: {
+    flex: 1,
+    minWidth: 0,
+  },
+  settingsBtn: {
+    marginTop: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Colors.inset,
+    borderWidth: 1,
+    borderTopColor: Colors.highlight,
+    borderLeftColor: Colors.highlight,
+    borderBottomColor: Colors.shadowDark,
+    borderRightColor: Colors.shadowDark,
+  },
+  settingsBg: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.7)",
+    justifyContent: "flex-end",
+  },
+  settingsSheet: {
+    backgroundColor: Colors.surface,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 18,
+    paddingTop: 16,
+    paddingBottom: 36,
+    borderWidth: 1,
+    borderBottomWidth: 0,
+    borderTopColor: Colors.highlight,
+    borderLeftColor: Colors.highlight,
+    borderRightColor: Colors.shadowDark,
+  },
+  settingsHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  settingsTitle: {
+    fontFamily: DISPLAY_FONT,
+    fontSize: 24,
+    color: "#fff",
+    letterSpacing: 0.6,
+  },
+  settingsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.highlight,
+  },
+  settingsRowText: {
+    color: Colors.textSoft,
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  settingsRowDanger: {
+    borderBottomWidth: 0,
+    marginTop: 4,
+  },
+  settingsRowDangerText: {
+    color: Colors.ctaEnd,
+    fontSize: 16,
+    fontWeight: "700",
+  },
   heroCard: {
     padding: 18,
     marginBottom: 20},
@@ -374,6 +699,10 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 12,
     paddingHorizontal: 12},
+  calPill: {
+    marginTop: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 12},
   statLabel: {
     color: Colors.textMuted,
     fontSize: 11,
@@ -394,6 +723,19 @@ const styles = StyleSheet.create({
   },
   inlineChart: {
     marginTop: 12},
+  myWorkoutLink: {
+    marginTop: 14,
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingVertical: 4,
+  },
+  myWorkoutLinkText: {
+    color: Colors.glowPurple,
+    fontSize: 15,
+    fontWeight: "700",
+  },
   cta: {
     marginTop: 16},
   sectionTitle: {

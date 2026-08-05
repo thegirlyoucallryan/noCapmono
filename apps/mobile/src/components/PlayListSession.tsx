@@ -4,18 +4,17 @@ import {
   StyleSheet,
   Pressable,
   FlatList,
-  Dimensions,
 } from "react-native";
+import { useEffect, useRef } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import Colors from "../constants/Colors";
 import { Exercise } from "../types/types";
 import { ExerciseGif } from "./ExerciseGif";
 import { WeightLogger } from "./WeightLogger";
-import { SpotifyVibePicker } from "./SpotifyVibePicker";
+// import { SpotifyVibePicker } from "./SpotifyVibePicker"; // Spotify paused
 import Theme from "../constants/Theme";
-
-const SCREEN_WIDTH = Dimensions.get("window").width;
+import { useLayout } from "../constants/layout";
 
 type Props = {
   steps: Exercise[];
@@ -46,19 +45,55 @@ export function PlayListSession({
   onNext,
   onLogged,
 }: Props) {
+  const layout = useLayout();
   const insets = useSafeAreaInsets();
+  const listRef = useRef<FlatList<Exercise>>(null);
   const timerLabel = String(timer).padStart(2, "0");
   // Tab bar + footer controls — leave room so the last row can scroll up
-  const listBottomPad = 160 + Math.max(insets.bottom, 12);
+  const listBottomPad =
+    (layout.isCompact ? 120 : 160) + Math.max(insets.bottom, 12);
+
+  useEffect(() => {
+    if (!steps.length) return;
+    const index = Math.min(Math.max(currentIndex, 0), steps.length - 1);
+    // After rest / next, bring the active (expanded) row into view
+    const t = setTimeout(() => {
+      try {
+        listRef.current?.scrollToIndex({
+          index,
+          animated: true,
+          viewPosition: 0.12,
+        });
+      } catch {
+        listRef.current?.scrollToOffset({
+          offset: Math.max(0, index * 72),
+          animated: true,
+        });
+      }
+    }, 80);
+    return () => clearTimeout(t);
+  }, [currentIndex, steps.length]);
 
   return (
     <View style={styles.wrap}>
-      <View style={styles.header}>
+      <View
+        style={[
+          styles.header,
+          layout.isCompact && { paddingHorizontal: 12, paddingVertical: 8 },
+        ]}
+      >
         <View>
           <Text style={styles.progress}>
             {currentIndex + 1} / {steps.length}
           </Text>
-          <Text style={styles.timer}>00:{timerLabel}</Text>
+          <Text
+            style={[
+              styles.timer,
+              layout.isCompact && { fontSize: layout.font.timer },
+            ]}
+          >
+            00:{timerLabel}
+          </Text>
         </View>
         <View style={styles.headerActions}>
           <Pressable onPress={onTogglePause} style={styles.iconBtn}>
@@ -78,22 +113,43 @@ export function PlayListSession({
       </View>
 
       <FlatList
+        ref={listRef}
         style={styles.list}
         data={steps}
         keyExtractor={(item, index) => `${item.id}-${index}`}
         contentContainerStyle={[
           styles.listContent,
-          { paddingBottom: listBottomPad },
+          {
+            paddingBottom: listBottomPad,
+            paddingHorizontal: layout.listHPad,
+          },
         ]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        onScrollToIndexFailed={(info) => {
+          listRef.current?.scrollToOffset({
+            offset: Math.max(0, info.averageItemLength * info.index),
+            animated: true,
+          });
+          setTimeout(() => {
+            listRef.current?.scrollToIndex({
+              index: info.index,
+              animated: true,
+              viewPosition: 0.12,
+            });
+          }, 120);
+        }}
         renderItem={({ item, index }) => {
           const active = index === currentIndex;
           const name = item.name.replace(/\(Male\)/i, "");
           return (
             <Pressable
               onPress={() => onJumpTo(index)}
-              style={[styles.row, active && styles.rowActive]}
+              style={[
+                styles.row,
+                active && styles.rowActive,
+                layout.isCompact && { padding: 10, marginBottom: 8 },
+              ]}
             >
               <View style={styles.rowTop}>
                 <Text style={[styles.step, active && styles.stepActive]}>
@@ -120,7 +176,13 @@ export function PlayListSession({
                   <ExerciseGif
                     key={`${item.id}-${index}`}
                     exerciseId={item.id}
-                    style={styles.thumb}
+                    style={[
+                      styles.thumb,
+                      {
+                        width: layout.listGifSize,
+                        height: layout.listGifSize,
+                      },
+                    ]}
                   />
                   <WeightLogger
                     key={`log-${item.id}-${index}`}
@@ -145,7 +207,9 @@ export function PlayListSession({
           { paddingBottom: Math.max(insets.bottom, 16) + 8 },
         ]}
       >
+        {/* Spotify paused — reclaim space until wired up
         <SpotifyVibePicker compact />
+        */}
         <View style={styles.navRow}>
           <Pressable onPress={onBack} style={styles.navBtn}>
             <Ionicons name="caret-back" size={20} color={Colors.glowCyan} />
@@ -257,8 +321,6 @@ const styles = StyleSheet.create({
   },
   thumb: {
     alignSelf: "center",
-    width: SCREEN_WIDTH * 0.48,
-    height: SCREEN_WIDTH * 0.48,
     borderRadius: 16,
   },
   footer: {
@@ -271,7 +333,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 24,
+    paddingHorizontal: 16,
     paddingTop: 4,
   },
   navBtn: {

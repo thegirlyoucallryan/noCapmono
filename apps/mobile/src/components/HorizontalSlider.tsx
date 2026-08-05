@@ -35,10 +35,15 @@ const BODY_PART_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   back: "body-outline",
   chest: "fitness-outline",
   "upper arms": "barbell-outline",
+  arms: "barbell-outline",
   "lower legs": "walk-outline",
+  calves: "walk-outline",
   "upper legs": "footsteps-outline",
+  legs: "footsteps-outline",
   waist: "ellipse-outline",
+  abs: "ellipse-outline",
   "lower arms": "hand-left-outline",
+  forearms: "hand-left-outline",
   neck: "person-outline",
 };
 
@@ -177,7 +182,12 @@ const HorizontalSlider = ({
         ? { equipment: item.keyName }
         : { bodyPart: item.title };
     const label = formatLabel(item);
-    const icon = getIcon(type, item.keyName || item.title || label);
+    // Body parts: API title ("upper arms"); equipment: keyName ("dumbbell")
+    const iconKey =
+      type === "Body Part"
+        ? item.title || item.keyName || label
+        : item.keyName || item.title || label;
+    const icon = getIcon(type, iconKey);
 
     return (
       <CategoryChip

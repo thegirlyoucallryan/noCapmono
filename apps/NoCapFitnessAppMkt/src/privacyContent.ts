@@ -10,7 +10,7 @@ export type PrivacySection = {
 export const PRIVACY_META = {
   title: "No-Cap Privacy Policy",
   effectiveDate: "July 20, 2026",
-  lastUpdated: "July 20, 2026",
+  lastUpdated: "August 5, 2026",
 };
 
 export const PRIVACY_INTRO = `This Privacy Policy explains how No-Cap ("No-Cap," "we," "us," or "our") collects, uses, stores, shares, and protects information when you use the No-Cap mobile application and related websites or pages (the "Service").
@@ -164,9 +164,12 @@ If you believe a child under 13 has provided personal information, contact ${LEG
 • appeal a denial of a privacy request where required by law.
 
 How to exercise rights:
-Email ${LEGAL_CONTACT_EMAIL} with the subject "Privacy Request – No-Cap" and tell us what you need. We may verify your identity before fulfilling requests.
+• Delete your account in the App: open Home, tap the settings gear, then Delete account. This permanently deletes your account and associated cloud data (workouts, logs, profile) within a reasonable period, except where retention is required or permitted by law.
+• For other privacy requests (access, correction, export, etc.), email ${LEGAL_CONTACT_EMAIL} with the subject "Privacy Request – No-Cap" and tell us what you need. We may verify your identity before fulfilling requests.
+• If you no longer have the App installed, email ${LEGAL_CONTACT_EMAIL} with the subject "Account Deletion – No-Cap" and we will process deletion after verifying your identity.
 
 Account controls:
+• Delete account permanently from Home → Settings in the App
 • Update profile details in the App where available
 • Disconnect Spotify in Spotify/account settings and/or the App
 • Revoke sensor permissions in device settings
